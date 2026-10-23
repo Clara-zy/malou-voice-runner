@@ -295,25 +295,27 @@ function showOver() {
 }
 
 function doSave() {
-  if (saved) return;
+  if (saved) return -1;
   const name = $('name-input').value.trim() || '匿名吗喽';
   try { localStorage.setItem(NAME_KEY, name); } catch (e) {}
-  addScore(name, pendingScore);
+  const rank = addScore(name, pendingScore);
   lastEntryTs = Date.now();
   saved = true;
   $('btn-save').disabled = true;
   $('btn-save').textContent = '已上榜 ✓';
   $('lb-over').innerHTML = lbHTML(loadLB(), lastEntryTs);
   $('name-input').blur(); // 让 Enter 重开不再被输入框拦下
+  return rank;
 }
 $('btn-save').addEventListener('click', doSave);
 $('name-input').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') doSave(); });
 $('btn-retry').addEventListener('click', () => { if (mode === 'over') resetRun(); });
 
 /* ================= 麦克风流程 ================= */
-$('btn-mic').addEventListener('click', async () => {
+async function startMic() {
   SFX.ensure();
   const btn = $('btn-mic');
+  if (btn.disabled) return;
   btn.disabled = true;
   btn.textContent = '🎤 正在开启麦克风…';
   $('mic-error').classList.add('hidden');
@@ -342,7 +344,8 @@ $('btn-mic').addEventListener('click', async () => {
   mode = 'ready';
   await sleep(3000);
   resetRun();
-});
+}
+$('btn-mic').addEventListener('click', startMic);
 
 $('btn-keyboard').addEventListener('click', () => {
   SFX.ensure();
@@ -725,6 +728,53 @@ function frame(ts) {
   draw();
 }
 requestAnimationFrame(frame);
+
+/* ================= 对外接口（linx.js 语音助手把它们注册成 MCP 工具） ================= */
+window.Game = {
+  get mode() { return mode; },
+  status() {
+    return {
+      screen: mode, // menu 主页 | calib/ready 开麦校准中 | play 对局中 | over 结算
+      score: mode === 'over' ? pendingScore : curScore(),
+      goal: 1000,
+      result: mode !== 'over' ? null : winInfo ? '上线成功' : (DEATHS[deathKey(deadInfo)] || DEATHS.pit)[1],
+      sensitivity: voice.sens,
+      sound: !muted,
+      mic: voice.active,
+      leaderboard: loadLB().slice(0, 5).map((e) => ({ name: e.name, score: e.score })),
+    };
+  },
+  start() {
+    if (mode === 'play') return '已经在对局中了';
+    if (mode === 'calib' || mode === 'ready') return '正在开麦校准，马上自动开局';
+    if (voice.active || DEMO) { resetRun(); return '开局倒计时开始'; }
+    startMic();
+    return '正在开麦：先安静 2 秒校准环境噪音，然后自动开局';
+  },
+  backToMenu() {
+    if (mode !== 'over') return '只有结算界面才能回主页，当前界面：' + mode;
+    toMenu();
+    return '已回到主页';
+  },
+  setSensitivity(v) {
+    v = clamp(Math.round(Number(v) * 10) / 10 || 1, 0.6, 1.8);
+    voice.sens = v;
+    $('sens').value = v;
+    $('sens-val').textContent = v.toFixed(1);
+    return `灵敏度已设为 ${v.toFixed(1)}`;
+  },
+  setSound(on) {
+    muted = !on;
+    return on ? '音效已打开' : '音效已关闭';
+  },
+  saveScore(name) {
+    if (mode !== 'over' || DEMO) return '只有结算界面才能上排行榜';
+    if (saved) return '本局成绩已经上过榜了';
+    if (name) $('name-input').value = String(name).trim().slice(0, 8);
+    const rank = doSave();
+    return rank < 10 ? `已上榜，排第 ${rank + 1} 名，${pendingScore} 行代码` : `已记录，${pendingScore} 行代码，可惜没进前十`;
+  },
+};
 
 toMenu();
 if (DEMO) resetRun(); // demo 走声控路径（demoVol），不启用键盘分支

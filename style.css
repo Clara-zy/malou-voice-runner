@@ -75,6 +75,22 @@ button.mid:disabled { background: #58c16b; color: #06240e; }
 #sens-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 2px; color: #9fb0e8; font-size: 15px; }
 #sens { width: 180px; accent-color: #ffd34d; }
 
+#linx-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 12px 0 2px; }
+#btn-linx { font-size: 15px; padding: 8px 16px; flex: none; }
+#linx-status { color: #9fb0e8; font-size: 14px; line-height: 1.5; text-align: left; max-width: 440px; user-select: text; -webkit-user-select: text; }
+#linx-status:empty { display: none; }
+#linx-status b { color: #ffd34d; font-size: 20px; letter-spacing: 2px; }
+#linx-status a { color: #8fb4ff; }
+#linx-status code { color: #ffd34d; font-size: 13px; }
+#linx-status.err { color: #ff8a8a; }
+#linx-sub {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 20;
+  max-width: 900px; padding: 8px 20px; border-radius: 14px;
+  background: rgba(9, 14, 30, .92); border: 1px solid rgba(130, 165, 255, .3);
+  color: #eef2ff; font-size: 18px; line-height: 1.6; text-align: center; pointer-events: none;
+}
+#linx-sub .me { color: #9fb0e8; }
+
 .lb { list-style: none; text-align: left; width: 340px; margin: 12px auto 4px; font-size: 17px; }
 .lb li { display: flex; align-items: center; gap: 10px; padding: 4px 10px; border-radius: 8px; }
 .lb li.me { background: rgba(255, 211, 77, .16); }
