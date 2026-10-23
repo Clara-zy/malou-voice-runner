@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 吗喽声控跑酷图标：深蓝夜色 + 金黄圆脸吗喽 + 红色 Bug -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#17224a"/>
+      <stop offset="1" stop-color="#0b1020"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#ffd34d" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#ffd34d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="96" fill="url(#glow)"/>
+  <!-- 远处城市剪影 -->
+  <g fill="#141f3d">
+    <rect x="40" y="330" width="70" height="140" rx="6"/>
+    <rect x="120" y="290" width="56" height="180" rx="6"/>
+    <rect x="360" y="300" width="60" height="170" rx="6"/>
+    <rect x="432" y="345" width="52" height="125" rx="6"/>
+  </g>
+  <!-- 地面 -->
+  <rect x="0" y="462" width="512" height="50" fill="#253d2c"/>
+  <rect x="0" y="462" width="512" height="10" fill="#3f7a4a"/>
+  <!-- 吗喽头 -->
+  <g>
+    <circle cx="256" cy="270" r="118" fill="#8a5a2b"/>
+    <ellipse cx="256" cy="316" rx="86" ry="70" fill="#d9a56b"/>
+    <ellipse cx="205" cy="218" rx="38" ry="46" fill="#d9a56b" transform="rotate(-18 205 218)"/>
+    <ellipse cx="307" cy="218" rx="38" ry="46" fill="#d9a56b" transform="rotate(18 307 218)"/>
+    <circle cx="205" cy="218" rx="16" ry="20" fill="#8a5a2b" transform="rotate(-18 205 218)"/>
+    <circle cx="307" cy="218" rx="16" ry="20" fill="#8a5a2b" transform="rotate(18 307 218)"/>
+    <ellipse cx="222" cy="292" rx="17" ry="21" fill="#fff"/>
+    <ellipse cx="290" cy="292" rx="17" ry="21" fill="#fff"/>
+    <circle cx="226" cy="296" r="8" fill="#1a1005"/>
+    <circle cx="286" cy="296" r="8" fill="#1a1005"/>
+    <!-- 大喊的嘴 -->
+    <ellipse cx="256" cy="344" rx="26" ry="20" fill="#7a1f1f"/>
+    <ellipse cx="256" cy="352" rx="14" ry="9" fill="#ff8f8f"/>
+    <!-- 音量波 -->
+    <g stroke="#ffd34d" stroke-width="14" stroke-linecap="round" fill="none" opacity="0.9">
+      <path d="M 396 210 A 60 60 0 0 1 396 294"/>
+      <path d="M 430 186 A 100 100 0 0 1 430 318"/>
+    </g>
+  </g>
+  <!-- Bug -->
+  <g>
+    <ellipse cx="118" cy="416" rx="34" ry="26" fill="#c93a3f"/>
+    <circle cx="106" cy="408" r="6" fill="#fff"/>
+    <circle cx="130" cy="408" r="6" fill="#fff"/>
+    <g stroke="#c93a3f" stroke-width="8" stroke-linecap="round">
+      <path d="M 92 400 L 68 386"/><path d="M 92 424 L 66 434"/>
+      <path d="M 144 400 L 168 386"/><path d="M 144 424 L 170 434"/>
+    </g>
+  </g>
+</svg>

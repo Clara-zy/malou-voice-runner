@@ -1,0 +1,16 @@
+{
+  "name": "吗喽声控跑酷 · 别让吗喽掉进 Bug",
+  "short_name": "吗喽跑酷",
+  "description": "声控跑酷：吗喽自动奔跑，大喊起跳躲开 Bug 与需求变更，跑满 1000 行代码成功上线",
+  "start_url": ".",
+  "scope": ".",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

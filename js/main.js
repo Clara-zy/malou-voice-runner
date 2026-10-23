@@ -23,3 +23,8 @@ requestAnimationFrame(frame);
 
 toMenu();
 if (DEMO) resetRun(); // demo 走声控路径（demoVol），不启用键盘分支
+
+// PWA：仅 http(s) 下注册（file:// 单文件版跳过）
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
