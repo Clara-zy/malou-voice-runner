@@ -8,6 +8,7 @@
  * 协议文档：https://linx.qiniu.com/docs/xrobot/platform/websocket
  *           https://linx.qiniu.com/docs/xrobot/mcp/hardware-mcp
  */
+const LINX_INTRO = '欢迎来玩“吗喽声控跑酷”。吗喽自己跑，你负责喊，喊得越响跳得越高。纸飞机飞来时别出声。跑满一千行就上线成功。跟我说：开始游戏。';
 const LINX_OTA = 'https://xrobo.qiniuapi.com/v1/ota/';
 const LINX_CONSOLE = 'https://xrobo.qiniu.com/';
 const LINX_RATE = 16000, LINX_FRAME = 320; // 上行 PCM16 单声道 20ms 一帧
@@ -122,6 +123,7 @@ class LinxClient {
       if (gen !== this.gen) return;
       this.busy = false;
       this.setButton('🗣️ 断开灵矽');
+      this.speak(LINX_INTRO, false);
       this.setStatus(`✅ 已连接：结算时会自动读出结果。也可以说「开始游戏」「灵敏度调低点」「帮我上榜，花名小王」<br>
         设备 ID <code>${linxIdentity().id}</code>（不是你的智能体在回答？到 <a href="${LINX_CONSOLE}" target="_blank" rel="noopener">智控台</a> → 设备管理 → 批量导入，填这个 MAC 后重连）`);
     } catch (e) {
@@ -322,7 +324,34 @@ class LinxClient {
 
   get idle() { return this.game.mode === 'menu' || this.game.mode === 'over'; }
 
-  // 结算页把本局结果直接交给灵矽朗读（text_response 按原文合成，不经过闲聊）
+  // 连上后的开场，以及结算页，都按原文交给灵矽朗读
+  speak(text, onOver) {
+    if (!text || !this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN || this.playError) return false;
+    if (this.ac && this.ac.state === 'suspended') this.ac.resume();
+    if (this.listening) this.endUtterance();
+    clearTimeout(this.quietTimer);
+    this.stopPlayback();
+    this.speaking = true; // 先堵住上行，避免现场叫声被当成新的一句话
+    this.abortSent = false;
+    this.awaitingResultTts = true;
+    this.subtitle(`🐵 ${linxEsc(text)}`);
+    this.send({
+      session_id: this.sessionId,
+      type: 'listen',
+      state: 'detect',
+      text: onOver ? '结算播报' : '开场介绍',
+      text_response: text,
+    });
+    clearTimeout(this.speakTimer);
+    this.speakTimer = setTimeout(() => {
+      if (!this.awaitingResultTts) return;
+      this.awaitingResultTts = false;
+      this.speaking = false;
+      if (onOver) this.voiceNote('灵矽没有把声音发回来。看一下网络，以及智能体有没有配好声音。');
+    }, 8000);
+    return true;
+  }
+
   speakResult(text) {
     if (!text) return;
     if (!this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -333,29 +362,7 @@ class LinxClient {
       this.voiceNote(this.playError);
       return;
     }
-    if (this.ac && this.ac.state === 'suspended') this.ac.resume();
-    if (this.listening) this.endUtterance();
-    clearTimeout(this.quietTimer);
-    this.stopPlayback();
-    this.speaking = true; // 先堵住上行，避免结算现场的叫声被当成新的一句话
-    this.abortSent = false;
-    this.awaitingResultTts = true;
-    this.voiceNote('正在朗读…');
-    this.subtitle(`🐵 ${linxEsc(text)}`);
-    this.send({
-      session_id: this.sessionId,
-      type: 'listen',
-      state: 'detect',
-      text: '结算播报',
-      text_response: text,
-    });
-    clearTimeout(this.speakTimer);
-    this.speakTimer = setTimeout(() => {
-      if (!this.awaitingResultTts) return;
-      this.awaitingResultTts = false;
-      this.speaking = false;
-      this.voiceNote('灵矽没有把声音发回来。看一下网络，以及智能体有没有配好声音。');
-    }, 8000);
+    if (this.speak(text, true)) this.voiceNote('正在朗读…');
   }
 
   // 只有主页 / 结算界面才收音和说话（收音由 onFrame 判断）；开麦校准、对局期间打断 TTS，
