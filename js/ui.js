@@ -65,8 +65,22 @@ function showOver() {
   $('over-save').classList.toggle('hidden', DEMO);
   $('lb-over').innerHTML = lbHTML(loadLB(), lastEntryTs);
   $('screen-over').classList.remove('hidden');
+  $('over-voice').textContent = '';
+  if (!DEMO && window.linx) window.linx.speakResult(overSpeech()); // 连接灵矽时口播结算
   if (!DEMO) $('name-input').focus();
   if (DEMO) setTimeout(() => { if (mode === 'over') resetRun(); }, 4000);
+}
+
+// 读给灵矽的口播稿：和结算页同一套文案，只把不好念的词换成说法
+function overSpeech() {
+  const title = $('over-title').textContent;
+  const score = $('over-score').textContent;
+  const msg = $('over-msg').textContent
+    .replace(/NullPointerException/g, '空指针异常')
+    .replace(/404/g, '四零四')
+    .replace(/P0/g, 'P零');
+  const tip = $('over-tip').textContent;
+  return [title, score, msg, tip].filter(Boolean).join('。');
 }
 
 function doSave() {
@@ -83,7 +97,11 @@ function doSave() {
   return rank;
 }
 $('btn-save').addEventListener('click', doSave);
-$('name-input').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') doSave(); });
+$('name-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' || e.key === 'Esc') return; // 留给页面：回主页
+  e.stopPropagation();
+  if (e.key === 'Enter') doSave();
+});
 $('btn-retry').addEventListener('click', () => { if (mode === 'over') resetRun(); });
 
 /* ================= 麦克风流程 ================= */
@@ -106,25 +124,27 @@ async function startMic() {
   if (btn.disabled) return;
   const myFlow = ++micFlow;
   btn.disabled = true;
-  btn.textContent = '🎤 正在开启麦克风…';
   $('mic-error').classList.add('hidden');
-  try {
-    // 权限弹窗被忽略时会一直挂起，8 秒无响应就提示去看弹窗
-    let late = false;
-    await Promise.race([
-      voice.start().then(() => { if (late) voice.stop(); }), // 超时后才成功：迟到的流立即关掉，不留挂起的麦克风
-      sleep(8000).then(() => { late = true; throw new Error('8 秒内没有响应——请检查浏览器顶部的麦克风权限弹窗'); }),
-    ]);
-  } catch (err) {
-    const why = err && err.name === 'NotAllowedError'
-      ? '麦克风权限被拒绝：请在地址栏允许麦克风后刷新页面'
-      : (err && err.message) || '未知错误';
-    $('mic-error').textContent = '麦克风开启失败：' + why + '。可先用键盘模式试玩。';
-    $('mic-error').classList.remove('hidden');
-    btn.disabled = false;
-    btn.textContent = '🎤 开麦上班';
-    return;
-  }
+  if (!voice.active) {
+    btn.textContent = '🎤 正在开启麦克风…';
+    try {
+      // 权限弹窗被忽略时会一直挂起，8 秒无响应就提示去看弹窗
+      let late = false;
+      await Promise.race([
+        voice.start().then(() => { if (late) voice.stop(); }), // 超时后才成功：迟到的流立即关掉，不留挂起的麦克风
+        sleep(8000).then(() => { late = true; throw new Error('8 秒内没有响应——请检查浏览器顶部的麦克风权限弹窗'); }),
+      ]);
+    } catch (err) {
+      const why = err && err.name === 'NotAllowedError'
+        ? '麦克风权限被拒绝：请在地址栏允许麦克风后刷新页面'
+        : (err && err.message) || '未知错误';
+      $('mic-error').textContent = '麦克风开启失败：' + why + '。可先用键盘模式试玩。';
+      $('mic-error').classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = '🎤 开麦上班';
+      return;
+    }
+  } // 已激活（Esc 回来重校准）：跳过权限环节直接重走校准
   if (myFlow !== micFlow) return;
   btn.textContent = '🎤 麦克风已就绪';
   $('meter-box').classList.remove('hidden');

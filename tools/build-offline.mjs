@@ -28,6 +28,14 @@ html = html.replace(/<script src="[^"]+"><\/script>/g, (tag) => {
 // PWA 清单在 file:// 下无意义，去掉避免控制台告警
 html = html.replace('<link rel="manifest" href="manifest.webmanifest">', '<!-- 单文件离线版：已剥离 PWA 清单 -->');
 
+// 本地图片内联为 data URI（file:// 打开时相对路径图片会 404）
+html = html.replace(/src="(assets\/[^"?]+)"/g, (m, rel) => {
+  const buf = readFileSync(join(root, rel));
+  const ext = rel.split('.').pop().toLowerCase();
+  const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', svg: 'image/svg+xml', webp: 'image/webp' }[ext] || 'application/octet-stream';
+  return `src="data:${mime};base64,${buf.toString('base64')}"`;
+});
+
 mkdirSync(join(root, 'dist'), { recursive: true });
 const out = join(root, 'dist/malou-offline.html');
 writeFileSync(out, html);

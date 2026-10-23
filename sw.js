@@ -11,7 +11,8 @@ const ASSETS = [
   'icon.svg', 'icon-192.png', 'icon-512.png',
   'js/util.js', 'js/config.js', 'js/voice.js', 'js/sfx.js',
   'js/world.js', 'js/game.js', 'js/render.js', 'js/ui.js', 'js/bridge.js', 'js/main.js',
-  'linx.js',
+  'linx.js', 'opus-decoder.min.js',
+  'assets/meme-office-monkey.jpg',
 ];
 
 self.addEventListener('install', (e) => {
