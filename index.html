@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>吗喽声控跑酷 · 别让吗喽掉进 Bug</title>
 <!-- 改了 js/css 记得把 ?v= 加一，避免浏览器混用新旧缓存 -->
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <div id="stage">
@@ -53,6 +53,7 @@
         <div id="sens-row">灵敏度
           <input type="range" id="sens" min="0.6" max="1.8" step="0.1" value="1">
           <span id="sens-val">1.0</span>
+          <label id="aec-label" title="开着能挡住外放 BGM 误触发，但可能压低喊声；切换后需重新开麦"><input type="checkbox" id="aec" checked> 回声消除</label>
         </div>
         <div id="linx-row">
           <button id="btn-linx" class="ghost">🗣️ 连接灵矽语音助手</button>
@@ -86,16 +87,16 @@
   <!-- 灵矽语音助手字幕 -->
   <div id="linx-sub" class="hidden"></div>
 </div>
-<script src="js/util.js?v=6"></script>
-<script src="js/config.js?v=6"></script>
-<script src="js/voice.js?v=6"></script>
-<script src="js/sfx.js?v=6"></script>
-<script src="js/world.js?v=6"></script>
-<script src="js/game.js?v=6"></script>
-<script src="js/render.js?v=6"></script>
-<script src="js/ui.js?v=6"></script>
-<script src="js/bridge.js?v=6"></script>
-<script src="js/main.js?v=6"></script>
+<script src="js/util.js?v=7"></script>
+<script src="js/config.js?v=7"></script>
+<script src="js/voice.js?v=7"></script>
+<script src="js/sfx.js?v=7"></script>
+<script src="js/world.js?v=7"></script>
+<script src="js/game.js?v=7"></script>
+<script src="js/render.js?v=7"></script>
+<script src="js/ui.js?v=7"></script>
+<script src="js/bridge.js?v=7"></script>
+<script src="js/main.js?v=7"></script>
 <script src="opus-decoder.min.js?v=1"></script>
 <script src="linx.js?v=9"></script>
 </body>

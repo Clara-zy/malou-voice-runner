@@ -150,7 +150,8 @@ async function startMic() {
   $('meter-box').classList.remove('hidden');
   $('calib-tip').classList.remove('hidden');
   mode = 'calib';
-  $('calib-tip').textContent = '🤫 请保持安静，正在测量环境噪音…';
+  const aec = voice.aecApplied == null ? '' : `（回声消除：${voice.aecApplied ? '开' : '关'}）`;
+  $('calib-tip').textContent = '🤫 请保持安静，正在测量环境噪音…' + aec;
   await voice.calibrate(1600);
   if (myFlow !== micFlow) return;
   // 试喊校准：按玩家自己的嗓门定起跳线，比全局阈值可靠得多
@@ -174,6 +175,17 @@ $('btn-mic').addEventListener('click', startMic);
 $('btn-keyboard').addEventListener('click', () => {
   SFX.ensure();
   resetRun(); // 不开麦，直接用空格模拟喊声
+});
+
+// 回声消除只能在开麦时设定：已开麦就关掉，让玩家重新点「开麦上班」按新设置开麦并重新校准
+$('aec').addEventListener('change', (e) => {
+  voice.echoCancel = e.target.checked;
+  e.target.blur(); // 别让复选框留着焦点，开局后按空格会被它吃掉
+  if (voice.active) {
+    voice.stop();
+    if (mode === 'calib' || mode === 'ready') mode = 'menu';
+    resetMicUI();
+  }
 });
 
 $('sens').addEventListener('input', (e) => {

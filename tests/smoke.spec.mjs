@@ -136,7 +136,8 @@ async function main() {
   });
   check('触摸长按满力跳', touchAir >= 235 && touchAir <= 275, `${touchAir}px`);
 
-  // ---- 4b. 麦克风抓峰：快喊立即满力、渐强喊声最终也能到满力（力度=峰值而非穿越帧） ----
+  // ---- 4b. 麦克风抓峰：快喊、渐强喊声的「首跳」都按峰值出力（力度=峰值而非穿越帧） ----
+  // 只量第一跳：量整段最大值会被持续喊声的第二下弹跳掩盖「首跳被锁最小力」的问题
   const micJump = async (rampMs) => page.evaluate(async (ms) => {
     window.__clearTrack();
     voice.active = true;
@@ -144,9 +145,14 @@ async function main() {
     voice.simLevel = 0.05;
     window.__maxAir = 0;
     window.__rec = true;
+    let jumped = false;
     const tick = () => {
-      window.__maxAir = Math.max(window.__maxAir, GROUND - player.y);
-      if (window.__rec) requestAnimationFrame(tick);
+      if (!player.grounded) jumped = true;
+      else if (jumped) window.__rec = false;
+      if (window.__rec) {
+        window.__maxAir = Math.max(window.__maxAir, GROUND - player.y);
+        requestAnimationFrame(tick);
+      }
     };
     requestAnimationFrame(tick);
     if (ms === 0) {
@@ -165,9 +171,9 @@ async function main() {
     return Math.round(window.__maxAir);
   }, rampMs);
   const fast = await micJump(0);     // 阶跃快喊：帧内冲顶
-  const slow = await micJump(500);   // 500ms 渐强：首跳中力度，持续喊弹跳到满力
+  const ramp = await micJump(120);   // 120ms 渐强：真人起音 + 平滑后的典型形态
   check('麦克风快喊抓峰满力跳', fast >= 230 && fast <= 280, `${fast}px`);
-  check('麦克风渐强喊声最终满力（弹跳）', slow >= 230 && slow <= 280, `${slow}px`);
+  check('麦克风渐强喊声首跳满力', ramp >= 230 && ramp <= 280, `${ramp}px`);
 
   // ---- 4c. 空中提前喊 → 落地缓冲跳继承喊声力度（不再固定最小力） ----
   await page.reload();
@@ -263,6 +269,15 @@ async function main() {
     return bad;
   });
   check('Tjump 阈值无死区（峰值×灵敏度 15 组矩阵）', matrix.length === 0, matrix.join(' ; ') || '全部 Tjump<peak');
+
+  // 回声消除开关：切换即关麦，重新开麦按新约束生效
+  await page2.evaluate(() => toMenu());
+  await page2.locator('#aec').uncheck();
+  const aecOff = await page2.evaluate(() => ({ active: voice.active, btn: document.getElementById('btn-mic').disabled }));
+  await page2.getByRole('button', { name: '🎤 开麦上班' }).click();
+  const aecState = await poll(page2, () => (mode === 'calib' ? { active: voice.active, aec: voice.aecApplied } : null), 8000, 100);
+  check('回声消除开关：切换关麦并按新设置重开', !aecOff.active && !aecOff.btn && !!aecState && aecState.active && aecState.aec === false,
+    aecState ? `aecApplied=${aecState.aec}` : '超时');
   await browser2.close();
 
   // ---- 8. 全程无未捕获 JS 错误 ----
