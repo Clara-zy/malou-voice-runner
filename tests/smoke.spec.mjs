@@ -48,11 +48,24 @@ async function poll(page, fn, timeoutMs = 15000, everyMs = 250) {
 async function startKeyboardRun(page) {
   await page.goto(BASE + '/');
   await page.getByRole('button', { name: /空格调试模式/ }).click();
-  await page.waitForTimeout(2800); // 等倒计时结束
+  // poll 到倒计时真正结束再返回（固定 sleep 在慢机上只有 400ms 余量）
+  await poll(page, () => mode === 'play' && countdown <= 0, 6000, 100);
+}
+
+// 注入清场函数到页面：力度/道具类测量不被随机生成的障碍干扰
+async function injectClearTrack(page) {
+  await page.evaluate(() => {
+    window.__clearTrack = () => {
+      obstacles.length = 0;
+      pickups.length = 0;
+      spawnX = GOAL_DIST + 9999;
+    };
+  });
 }
 
 async function maxAirOf(page, holdMs) {
   return page.evaluate(async (ms) => {
+    window.__clearTrack();
     window.__maxAir = 0;
     window.__rec = true;
     const tick = () => {
@@ -95,7 +108,8 @@ async function main() {
   // ---- 3. 空格蓄力：小蓄力 vs 满蓄力跳高差异（喊得越响跳得越高） ----
   await page.reload();
   await page.getByRole('button', { name: /空格调试模式/ }).click();
-  await page.waitForTimeout(2800);
+  await poll(page, () => mode === 'play' && countdown <= 0, 6000, 100);
+  await injectClearTrack(page);
   const small = await maxAirOf(page, 180);
   const big = await maxAirOf(page, 500);
   check('空格蓄力跳高随蓄力增长', small >= 120 && small <= 205 && big >= 200 && big <= 245 && big > small, `180ms=${small}px / 500ms=${big}px`);
@@ -103,8 +117,10 @@ async function main() {
   // ---- 4. 触摸长按蓄力 = 满力跳（移动端入口） ----
   await page.reload();
   await page.getByRole('button', { name: /空格调试模式/ }).click();
-  await page.waitForTimeout(2800);
+  await poll(page, () => mode === 'play' && countdown <= 0, 6000, 100);
+  await injectClearTrack(page);
   const touchAir = await page.evaluate(async () => {
+    window.__clearTrack();
     window.__maxAir = 0;
     window.__rec = true;
     const tick = () => {
@@ -122,8 +138,9 @@ async function main() {
 
   // ---- 5. 道具收集计分（清空赛道做纯道具断言） ----
   await startKeyboardRun(page);
+  await injectClearTrack(page);
   const pickup = await page.evaluate(async () => {
-    obstacles.length = 0; spawnX = GOAL_DIST + 9999; // 纯净跑道
+    window.__clearTrack();
     pickups.push({ type: 'coffee', x: player.x + 220, y: 485, w: 44, h: 44, taken: false });
     setTimeout(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
@@ -164,6 +181,33 @@ async function main() {
     return { dead: !!deadInfo, label: deadInfo ? deadInfo.label : null };
   });
   check('狂暴中纸飞机仍致命', plane.dead && plane.label === '需求变更变更');
+
+  // ---- 8. 假麦克风全链路：开麦→噪音校准→试喊校准→开局（P0 核心路径首次自动化覆盖） ----
+  const browser2 = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
+  const page2 = await browser2.newPage({ viewport: { width: 1440, height: 860 } });
+  await page2.goto(BASE + '/');
+  await page2.getByRole('button', { name: '🎤 开麦上班' }).click();
+  const micState = await poll(page2, () => (mode === 'play' ? {
+    active: voice.active,
+    peak: +voice.shoutPeak.toFixed(3),
+    floor: +voice.floor.toFixed(3),
+    tjump: +voice.Tjump.toFixed(3),
+  } : null), 20000, 300);
+  check('假麦克风走完开麦→校准→开局全流程', !!micState && micState.active,
+    micState ? `peak=${micState.peak} floor=${micState.floor} Tjump=${micState.tjump}` : '超时');
+  const matrix = await page2.evaluate(() => {
+    const bad = [];
+    for (const peak of [0.05, 0.12, 0.3, 0.5, 0.9]) {
+      for (const sens of [0.6, 1, 1.8]) {
+        voice.shoutPeak = peak; voice.sens = sens;
+        if (!(voice.Tjump < peak)) bad.push(`peak=${peak}/sens=${sens}→T=${voice.Tjump.toFixed(3)}`);
+      }
+    }
+    voice.sens = 1;
+    return bad;
+  });
+  check('Tjump 阈值无死区（峰值×灵敏度 15 组矩阵）', matrix.length === 0, matrix.join(' ; ') || '全部 Tjump<peak');
+  await browser2.close();
 
   // ---- 8. 全程无未捕获 JS 错误 ----
   check('页面无 JS 错误', !errs.length, errs.slice(0, 2).join('; '));

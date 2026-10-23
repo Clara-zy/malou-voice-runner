@@ -22,7 +22,7 @@ function addScore(name, score) {
   lb.push(entry);
   lb.sort((a, b) => b.score - a.score);
   try { localStorage.setItem(LB_KEY, JSON.stringify(lb.slice(0, 10))); } catch (e) {}
-  return lb.indexOf(entry);
+  return { ts: entry.ts, rank: lb.indexOf(entry) };
 }
 function lbHTML(list, meTs) {
   const top = list.slice(0, 5);
@@ -73,8 +73,8 @@ function doSave() {
   if (saved) return -1;
   const name = $('name-input').value.trim() || '匿名吗喽';
   try { localStorage.setItem(NAME_KEY, name); } catch (e) {}
-  const rank = addScore(name, pendingScore);
-  lastEntryTs = Date.now();
+  const { ts, rank } = addScore(name, pendingScore);
+  lastEntryTs = ts; // 复用同一次写入的时间戳，榜单高亮不会因跨毫秒偶发失效
   saved = true;
   $('btn-save').disabled = true;
   $('btn-save').textContent = '已上榜 ✓';
@@ -87,18 +87,33 @@ $('name-input').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.
 $('btn-retry').addEventListener('click', () => { if (mode === 'over') resetRun(); });
 
 /* ================= 麦克风流程 ================= */
+let micFlow = 0; // 流程令牌：Esc 打断/回菜单后，旧流程在下一个 await 点自动作废
+
+// 回到菜单时复位开麦控件，让「手感不对 → Esc → 重新校准」成为完整闭环
+function resetMicUI() {
+  micFlow++;
+  const btn = $('btn-mic');
+  btn.disabled = false;
+  btn.textContent = '🎤 开麦上班';
+  $('meter-box').classList.add('hidden');
+  $('calib-tip').classList.add('hidden');
+  $('mic-error').classList.add('hidden');
+}
+
 async function startMic() {
   SFX.ensure();
   const btn = $('btn-mic');
   if (btn.disabled) return;
+  const myFlow = ++micFlow;
   btn.disabled = true;
   btn.textContent = '🎤 正在开启麦克风…';
   $('mic-error').classList.add('hidden');
   try {
     // 权限弹窗被忽略时会一直挂起，8 秒无响应就提示去看弹窗
+    let late = false;
     await Promise.race([
-      voice.start(),
-      sleep(8000).then(() => { throw new Error('8 秒内没有响应——请检查浏览器顶部的麦克风权限弹窗'); }),
+      voice.start().then(() => { if (late) voice.stop(); }), // 超时后才成功：迟到的流立即关掉，不留挂起的麦克风
+      sleep(8000).then(() => { late = true; throw new Error('8 秒内没有响应——请检查浏览器顶部的麦克风权限弹窗'); }),
     ]);
   } catch (err) {
     const why = err && err.name === 'NotAllowedError'
@@ -110,23 +125,28 @@ async function startMic() {
     btn.textContent = '🎤 开麦上班';
     return;
   }
+  if (myFlow !== micFlow) return;
   btn.textContent = '🎤 麦克风已就绪';
   $('meter-box').classList.remove('hidden');
   $('calib-tip').classList.remove('hidden');
   mode = 'calib';
   $('calib-tip').textContent = '🤫 请保持安静，正在测量环境噪音…';
   await voice.calibrate(1600);
+  if (myFlow !== micFlow) return;
   // 试喊校准：按玩家自己的嗓门定起跳线，比全局阈值可靠得多
   $('calib-tip').textContent = '👉 现在用你最大的声音——喊一嗓子！（测量你的嗓门基线）';
   const peak = await voice.calibrateShout(1500);
-  if (peak > 0 && peak > voice.floor * 3) {
-    $('calib-tip').textContent = `✅ 起跳线已按你的嗓门校准！试着冲进红区就会起跳，马上开始…`;
+  if (myFlow !== micFlow) return;
+  // 有效性直接对照最终起跳线（含 clamp/噪音底/灵敏度），和 Tjump 公式天然闭环
+  if (peak > voice.Tjump * 1.15) {
+    $('calib-tip').textContent = '✅ 起跳线已按你的嗓门校准！试着冲进红区就会起跳，马上开始…';
   } else {
-    voice.shoutPeak = 0; // 没测到有效喊声，退回默认阈值
-    $('calib-tip').textContent = '🤔 没太听到你喊？先用默认灵敏度开局，手感不对按 Esc 回来重校准';
+    voice.shoutPeak = 0; // 喊声没明显高于环境音，退回默认阈值
+    $('calib-tip').textContent = '🤔 没太听到你喊？先用默认灵敏度开局，手感不对按 Esc 回来把灵敏度调高再试';
   }
   mode = 'ready';
   await sleep(2600);
+  if (myFlow !== micFlow) return;
   resetRun();
 }
 $('btn-mic').addEventListener('click', startMic);

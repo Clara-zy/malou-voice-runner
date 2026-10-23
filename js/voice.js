@@ -14,13 +14,18 @@ class VoiceInput {
   }
 
   // 「跳」的音量门槛：得真喊；喊得越响跳得越高（力度按超出量计算）
-  // 试喊校准过就按玩家自己的嗓门取 45% 分位，否则用保守默认值
+  // 校准过：45% 嗓门起跳，封顶 75%——任何灵敏度档位下阈值都必然低于玩家实测峰值，
+  // 杜绝"校准成功却整局跳不起来"的死区；下限兜住环境音（×2），避免欢呼声误触发。
   get Tjump() {
-    const base = this.shoutPeak > 0 ? clamp(this.shoutPeak * 0.45, 0.09, 0.6) : 0.17;
-    return Math.max(base, this.floor * 3) / this.sens;
+    if (this.shoutPeak > 0) {
+      return clamp(this.shoutPeak * 0.45, Math.max(this.floor * 2, this.shoutPeak * 0.25), this.shoutPeak * 0.75) / this.sens;
+    }
+    return Math.max(0.17, this.floor * 3) / this.sens;
   }
 
   async start() {
+    // 幂等：重复开麦直接复用（Safari 对同页 AudioContext 数量有硬限制，不能每次重开）
+    if (this.active) { await this.ctx.resume(); return; }
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         // 回声消除开着：大屏音箱的声音进了麦克风也不至于误触发跳跃
@@ -41,22 +46,40 @@ class VoiceInput {
     this.active = true;
   }
 
+  // 彻底释放麦克风与音频上下文（超时兜底 / Esc 打断时调用，不留挂起的流）
+  stop() {
+    if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
+    if (this.ctx) { try { this.ctx.close(); } catch (e) {} }
+    this.active = false;
+    this.level = 0;
+    this.ctx = null;
+    this.stream = null;
+    this.analyser = null;
+  }
+
   // 开局校准：静默采样 1.6s，取 70 分位当噪音底
+  // setTimeout 兜底：标签页失焦 rAF 停转时流程也能照常结束，不会卡死在 calib
   calibrate(ms = 1600) {
     return new Promise((resolve) => {
       const samples = [];
       const t0 = performance.now();
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        samples.sort((a, b) => a - b);
+        this.floor = Math.max(0.002, samples[Math.floor(samples.length * 0.7)] || 0.004);
+        resolve(this.floor);
+      };
       const tick = () => {
+        if (done) return;
         const raw = this.readRaw();
         if (raw != null) samples.push(raw);
         if (performance.now() - t0 < ms) requestAnimationFrame(tick);
-        else {
-          samples.sort((a, b) => a - b);
-          this.floor = Math.max(0.002, samples[Math.floor(samples.length * 0.7)] || 0.004);
-          resolve(this.floor);
-        }
+        else finish();
       };
       tick();
+      setTimeout(finish, ms + 600);
     });
   }
 
@@ -65,13 +88,22 @@ class VoiceInput {
     return new Promise((resolve) => {
       let peak = 0;
       const t0 = performance.now();
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        this.shoutPeak = peak;
+        resolve(peak);
+      };
       const tick = () => {
+        if (done) return;
         this.update();
         if (this.level > peak) peak = this.level;
         if (performance.now() - t0 < ms) requestAnimationFrame(tick);
-        else { this.shoutPeak = peak; resolve(peak); }
+        else finish();
       };
       tick();
+      setTimeout(finish, ms + 600);
     });
   }
 

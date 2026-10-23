@@ -166,13 +166,18 @@ class VoiceInput {
   }
 
   // 「跳」的音量门槛：得真喊；喊得越响跳得越高（力度按超出量计算）
-  // 试喊校准过就按玩家自己的嗓门取 45% 分位，否则用保守默认值
+  // 校准过：45% 嗓门起跳，封顶 75%——任何灵敏度档位下阈值都必然低于玩家实测峰值，
+  // 杜绝"校准成功却整局跳不起来"的死区；下限兜住环境音（×2），避免欢呼声误触发。
   get Tjump() {
-    const base = this.shoutPeak > 0 ? clamp(this.shoutPeak * 0.45, 0.09, 0.6) : 0.17;
-    return Math.max(base, this.floor * 3) / this.sens;
+    if (this.shoutPeak > 0) {
+      return clamp(this.shoutPeak * 0.45, Math.max(this.floor * 2, this.shoutPeak * 0.25), this.shoutPeak * 0.75) / this.sens;
+    }
+    return Math.max(0.17, this.floor * 3) / this.sens;
   }
 
   async start() {
+    // 幂等：重复开麦直接复用（Safari 对同页 AudioContext 数量有硬限制，不能每次重开）
+    if (this.active) { await this.ctx.resume(); return; }
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         // 回声消除开着：大屏音箱的声音进了麦克风也不至于误触发跳跃
@@ -193,22 +198,40 @@ class VoiceInput {
     this.active = true;
   }
 
+  // 彻底释放麦克风与音频上下文（超时兜底 / Esc 打断时调用，不留挂起的流）
+  stop() {
+    if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
+    if (this.ctx) { try { this.ctx.close(); } catch (e) {} }
+    this.active = false;
+    this.level = 0;
+    this.ctx = null;
+    this.stream = null;
+    this.analyser = null;
+  }
+
   // 开局校准：静默采样 1.6s，取 70 分位当噪音底
+  // setTimeout 兜底：标签页失焦 rAF 停转时流程也能照常结束，不会卡死在 calib
   calibrate(ms = 1600) {
     return new Promise((resolve) => {
       const samples = [];
       const t0 = performance.now();
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        samples.sort((a, b) => a - b);
+        this.floor = Math.max(0.002, samples[Math.floor(samples.length * 0.7)] || 0.004);
+        resolve(this.floor);
+      };
       const tick = () => {
+        if (done) return;
         const raw = this.readRaw();
         if (raw != null) samples.push(raw);
         if (performance.now() - t0 < ms) requestAnimationFrame(tick);
-        else {
-          samples.sort((a, b) => a - b);
-          this.floor = Math.max(0.002, samples[Math.floor(samples.length * 0.7)] || 0.004);
-          resolve(this.floor);
-        }
+        else finish();
       };
       tick();
+      setTimeout(finish, ms + 600);
     });
   }
 
@@ -217,13 +240,22 @@ class VoiceInput {
     return new Promise((resolve) => {
       let peak = 0;
       const t0 = performance.now();
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        this.shoutPeak = peak;
+        resolve(peak);
+      };
       const tick = () => {
+        if (done) return;
         this.update();
         if (this.level > peak) peak = this.level;
         if (performance.now() - t0 < ms) requestAnimationFrame(tick);
-        else { this.shoutPeak = peak; resolve(peak); }
+        else finish();
       };
       tick();
+      setTimeout(finish, ms + 600);
     });
   }
 
@@ -311,7 +343,9 @@ const Music = {
   },
   schedule() {
     if (!this.playing || !SFX.ctx) return;
-    if (muted) { this.nextT = Math.max(this.nextT, SFX.ctx.currentTime + 0.1); return; }
+    // 后台节流/上下文挂起恢复后，不补排落下的音符（否则切回标签页瞬间齐鸣）
+    this.nextT = Math.max(this.nextT, SFX.ctx.currentTime + 0.05);
+    if (muted) return;
     const spb = 60 / this.BPM / 2 / this.rate; // 八分音符时长，rate 越大节奏越快
     while (this.nextT < SFX.ctx.currentTime + 0.18) {
       const t = this.nextT, s = this.step;
@@ -476,17 +510,21 @@ function isOverPit() {
 /* ================= 输入 ================= */
 addEventListener('keydown', (e) => {
   const k = e.key;
+  if (document.activeElement === $('name-input')) return; // 输花名时不响应任何游戏快捷键（含 F/M）
   if (k === 'f' || k === 'F') {
     if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
     else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
     return;
   }
   if (k === 'm' || k === 'M') { muted = !muted; return; }
-  if (document.activeElement === $('name-input')) return;
   if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) e.preventDefault();
   if (mode === 'over') {
     if (k === 'Enter') { if (mode === 'over') resetRun(); }
     else if (k === 'Escape') toMenu();
+    return;
+  }
+  if (mode === 'calib' || mode === 'ready') {
+    if (k === 'Escape') toMenu(); // 校准等不下去了也能退出（流程令牌会自动作废）
     return;
   }
   if (mode !== 'play') return;
@@ -526,8 +564,10 @@ addEventListener('pointerup', endTouch);
 addEventListener('pointercancel', endTouch);
 stageEl.addEventListener('contextmenu', (e) => e.preventDefault()); // 长按别弹菜单
 
-/* 喊声包络：蓄得越久喊得越响（chargeVol）、也喊得越久（发疯值按时间充电） */
+/* 喊声包络：蓄得越久喊得越响（chargeVol）、也喊得越久（发疯值按时间充电）
+ * 最短按 0.06s 兜底：亚帧极速轻点也至少是一次小跳，不会完全不跳 */
 function triggerShout(t) {
+  t = Math.max(t, 0.06);
   shoutVol = chargeVol(t);
   shoutT = 0.15 + t * 1.2;
 }
@@ -586,6 +626,7 @@ function resetRun() {
 function toMenu() {
   mode = 'menu';
   Music.stop();
+  resetMicUI(); // 复位开麦按钮/音量条，支持「Esc 回来 → 重新校准」
   $('screen-over').classList.add('hidden');
   $('screen-start').classList.remove('hidden');
   lbRefreshStart();
@@ -1197,7 +1238,7 @@ function addScore(name, score) {
   lb.push(entry);
   lb.sort((a, b) => b.score - a.score);
   try { localStorage.setItem(LB_KEY, JSON.stringify(lb.slice(0, 10))); } catch (e) {}
-  return lb.indexOf(entry);
+  return { ts: entry.ts, rank: lb.indexOf(entry) };
 }
 function lbHTML(list, meTs) {
   const top = list.slice(0, 5);
@@ -1248,8 +1289,8 @@ function doSave() {
   if (saved) return -1;
   const name = $('name-input').value.trim() || '匿名吗喽';
   try { localStorage.setItem(NAME_KEY, name); } catch (e) {}
-  const rank = addScore(name, pendingScore);
-  lastEntryTs = Date.now();
+  const { ts, rank } = addScore(name, pendingScore);
+  lastEntryTs = ts; // 复用同一次写入的时间戳，榜单高亮不会因跨毫秒偶发失效
   saved = true;
   $('btn-save').disabled = true;
   $('btn-save').textContent = '已上榜 ✓';
@@ -1262,18 +1303,33 @@ $('name-input').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.
 $('btn-retry').addEventListener('click', () => { if (mode === 'over') resetRun(); });
 
 /* ================= 麦克风流程 ================= */
+let micFlow = 0; // 流程令牌：Esc 打断/回菜单后，旧流程在下一个 await 点自动作废
+
+// 回到菜单时复位开麦控件，让「手感不对 → Esc → 重新校准」成为完整闭环
+function resetMicUI() {
+  micFlow++;
+  const btn = $('btn-mic');
+  btn.disabled = false;
+  btn.textContent = '🎤 开麦上班';
+  $('meter-box').classList.add('hidden');
+  $('calib-tip').classList.add('hidden');
+  $('mic-error').classList.add('hidden');
+}
+
 async function startMic() {
   SFX.ensure();
   const btn = $('btn-mic');
   if (btn.disabled) return;
+  const myFlow = ++micFlow;
   btn.disabled = true;
   btn.textContent = '🎤 正在开启麦克风…';
   $('mic-error').classList.add('hidden');
   try {
     // 权限弹窗被忽略时会一直挂起，8 秒无响应就提示去看弹窗
+    let late = false;
     await Promise.race([
-      voice.start(),
-      sleep(8000).then(() => { throw new Error('8 秒内没有响应——请检查浏览器顶部的麦克风权限弹窗'); }),
+      voice.start().then(() => { if (late) voice.stop(); }), // 超时后才成功：迟到的流立即关掉，不留挂起的麦克风
+      sleep(8000).then(() => { late = true; throw new Error('8 秒内没有响应——请检查浏览器顶部的麦克风权限弹窗'); }),
     ]);
   } catch (err) {
     const why = err && err.name === 'NotAllowedError'
@@ -1285,23 +1341,28 @@ async function startMic() {
     btn.textContent = '🎤 开麦上班';
     return;
   }
+  if (myFlow !== micFlow) return;
   btn.textContent = '🎤 麦克风已就绪';
   $('meter-box').classList.remove('hidden');
   $('calib-tip').classList.remove('hidden');
   mode = 'calib';
   $('calib-tip').textContent = '🤫 请保持安静，正在测量环境噪音…';
   await voice.calibrate(1600);
+  if (myFlow !== micFlow) return;
   // 试喊校准：按玩家自己的嗓门定起跳线，比全局阈值可靠得多
   $('calib-tip').textContent = '👉 现在用你最大的声音——喊一嗓子！（测量你的嗓门基线）';
   const peak = await voice.calibrateShout(1500);
-  if (peak > 0 && peak > voice.floor * 3) {
-    $('calib-tip').textContent = `✅ 起跳线已按你的嗓门校准！试着冲进红区就会起跳，马上开始…`;
+  if (myFlow !== micFlow) return;
+  // 有效性直接对照最终起跳线（含 clamp/噪音底/灵敏度），和 Tjump 公式天然闭环
+  if (peak > voice.Tjump * 1.15) {
+    $('calib-tip').textContent = '✅ 起跳线已按你的嗓门校准！试着冲进红区就会起跳，马上开始…';
   } else {
-    voice.shoutPeak = 0; // 没测到有效喊声，退回默认阈值
-    $('calib-tip').textContent = '🤔 没太听到你喊？先用默认灵敏度开局，手感不对按 Esc 回来重校准';
+    voice.shoutPeak = 0; // 喊声没明显高于环境音，退回默认阈值
+    $('calib-tip').textContent = '🤔 没太听到你喊？先用默认灵敏度开局，手感不对按 Esc 回来把灵敏度调高再试';
   }
   mode = 'ready';
   await sleep(2600);
+  if (myFlow !== micFlow) return;
   resetRun();
 }
 $('btn-mic').addEventListener('click', startMic);

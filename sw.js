@@ -28,6 +28,18 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // HTML 导航 network-first：改版立即生效（断网回落缓存）；其余资源 cache-first，靠 ?v= 版本号更新
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          if (res.ok) caches.open(CACHE).then((c) => c.put('index.html', res.clone()));
+          return res;
+        })
+        .catch(() => caches.match('index.html', { ignoreSearch: true }))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((hit) => {
       if (hit) return hit;

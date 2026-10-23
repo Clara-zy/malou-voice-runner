@@ -84,17 +84,21 @@ function isOverPit() {
 /* ================= 输入 ================= */
 addEventListener('keydown', (e) => {
   const k = e.key;
+  if (document.activeElement === $('name-input')) return; // 输花名时不响应任何游戏快捷键（含 F/M）
   if (k === 'f' || k === 'F') {
     if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
     else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
     return;
   }
   if (k === 'm' || k === 'M') { muted = !muted; return; }
-  if (document.activeElement === $('name-input')) return;
   if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) e.preventDefault();
   if (mode === 'over') {
     if (k === 'Enter') { if (mode === 'over') resetRun(); }
     else if (k === 'Escape') toMenu();
+    return;
+  }
+  if (mode === 'calib' || mode === 'ready') {
+    if (k === 'Escape') toMenu(); // 校准等不下去了也能退出（流程令牌会自动作废）
     return;
   }
   if (mode !== 'play') return;
@@ -134,8 +138,10 @@ addEventListener('pointerup', endTouch);
 addEventListener('pointercancel', endTouch);
 stageEl.addEventListener('contextmenu', (e) => e.preventDefault()); // 长按别弹菜单
 
-/* 喊声包络：蓄得越久喊得越响（chargeVol）、也喊得越久（发疯值按时间充电） */
+/* 喊声包络：蓄得越久喊得越响（chargeVol）、也喊得越久（发疯值按时间充电）
+ * 最短按 0.06s 兜底：亚帧极速轻点也至少是一次小跳，不会完全不跳 */
 function triggerShout(t) {
+  t = Math.max(t, 0.06);
   shoutVol = chargeVol(t);
   shoutT = 0.15 + t * 1.2;
 }
@@ -194,6 +200,7 @@ function resetRun() {
 function toMenu() {
   mode = 'menu';
   Music.stop();
+  resetMicUI(); // 复位开麦按钮/音量条，支持「Esc 回来 → 重新校准」
   $('screen-over').classList.add('hidden');
   $('screen-start').classList.remove('hidden');
   lbRefreshStart();

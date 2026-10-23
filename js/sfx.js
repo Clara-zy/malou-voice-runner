@@ -51,7 +51,9 @@ const Music = {
   },
   schedule() {
     if (!this.playing || !SFX.ctx) return;
-    if (muted) { this.nextT = Math.max(this.nextT, SFX.ctx.currentTime + 0.1); return; }
+    // 后台节流/上下文挂起恢复后，不补排落下的音符（否则切回标签页瞬间齐鸣）
+    this.nextT = Math.max(this.nextT, SFX.ctx.currentTime + 0.05);
+    if (muted) return;
     const spb = 60 / this.BPM / 2 / this.rate; // 八分音符时长，rate 越大节奏越快
     while (this.nextT < SFX.ctx.currentTime + 0.18) {
       const t = this.nextT, s = this.step;
