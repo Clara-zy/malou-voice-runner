@@ -2,7 +2,7 @@
 
 /* Service Worker：预缓存全部静态资源，断网也能完整游玩（摆摊/现场兜底）
  * 注意：改动任何静态资源时把 CACHE 版本号 +1，否则老设备拿不到新版本。 */
-const CACHE = 'malou-v2';
+const CACHE = 'malou-v3';
 const ASSETS = [
   './',
   'index.html',
@@ -11,7 +11,8 @@ const ASSETS = [
   'icon.svg', 'icon-192.png', 'icon-512.png',
   'js/util.js', 'js/config.js', 'js/voice.js', 'js/sfx.js',
   'js/world.js', 'js/game.js', 'js/render.js', 'js/ui.js', 'js/bridge.js', 'js/main.js',
-  'linx.js',
+  'linx.js', 'opus-decoder.min.js',
+  'assets/meme-office-monkey.jpg',
 ];
 
 self.addEventListener('install', (e) => {

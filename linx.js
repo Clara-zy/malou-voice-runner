@@ -8,6 +8,7 @@
  * 协议文档：https://linx.qiniu.com/docs/xrobot/platform/websocket
  *           https://linx.qiniu.com/docs/xrobot/mcp/hardware-mcp
  */
+const LINX_INTRO = '欢迎来玩“吗喽声控跑酷”。吗喽自己跑，你负责喊，喊得越响跳得越高。纸飞机飞来时别出声。跑满一千行就上线成功。跟我说：开始游戏。';
 const LINX_OTA = 'https://xrobo.qiniuapi.com/v1/ota/';
 const LINX_CONSOLE = 'https://xrobo.qiniu.com/';
 const LINX_RATE = 16000, LINX_FRAME = 320; // 上行 PCM16 单声道 20ms 一帧
@@ -91,6 +92,10 @@ class LinxClient {
     el.classList.toggle('err', !!err);
   }
   setButton(text) { document.getElementById('btn-linx').textContent = text; }
+  voiceNote(text) {
+    const el = document.getElementById('over-voice');
+    if (el) el.textContent = text || '';
+  }
   subtitle(html) {
     document.getElementById('linx-sub').innerHTML = html;
     this.subTs = performance.now();
@@ -118,7 +123,8 @@ class LinxClient {
       if (gen !== this.gen) return;
       this.busy = false;
       this.setButton('🗣️ 断开灵矽');
-      this.setStatus(`✅ 已连接：在主页或结算界面说「开始游戏」「灵敏度调低点」「帮我上榜，花名小王」试试<br>
+      this.speak(LINX_INTRO, false);
+      this.setStatus(`✅ 已连接：结算时会自动读出结果。也可以说「开始游戏」「灵敏度调低点」「帮我上榜，花名小王」<br>
         设备 ID <code>${linxIdentity().id}</code>（不是你的智能体在回答？到 <a href="${LINX_CONSOLE}" target="_blank" rel="noopener">智控台</a> → 设备管理 → 批量导入，填这个 MAC 后重连）`);
     } catch (e) {
       if (gen !== this.gen) return;
@@ -288,11 +294,16 @@ class LinxClient {
     this.preroll = [];
     this.loud = 0;
     clearTimeout(this.quietTimer);
+    clearTimeout(this.speakTimer);
+    this.awaitingResultTts = false;
     if (this.ws) { this.ws.onclose = null; this.ws.close(); this.ws = null; }
     if (this.src) { this.src.disconnect(); this.src = null; }
     if (this.node) { this.node.port.onmessage = null; this.node = null; }
     if (this.stream) { this.stream.getTracks().forEach((t) => t.stop()); this.stream = null; }
-    if (this.decoder) { try { this.decoder.close(); } catch (e) {} this.decoder = null; }
+    if (this.opus && this.opus.free) { try { this.opus.free(); } catch (e) {} }
+    this.opus = null;
+    this.opusReady = false;
+    this.opusQueue = [];
     this.stopPlayback();
     this.setButton('🗣️ 连接灵矽语音助手');
     this.setStatus(reason || '', err);
@@ -312,6 +323,67 @@ class LinxClient {
   }
 
   get idle() { return this.game.mode === 'menu' || this.game.mode === 'over'; }
+
+  // 连上后的开场，以及结算页，都按原文交给灵矽朗读
+  speak(text, onOver) {
+    if (!text || !this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN || this.playError) return false;
+    if (this.ac && this.ac.state === 'suspended') this.ac.resume();
+    if (this.listening) this.endUtterance();
+    clearTimeout(this.quietTimer);
+    this.stopPlayback();
+    this.suppressTts = false;
+    this.speaking = true; // 先堵住上行，避免现场叫声被当成新的一句话
+    this.abortSent = false;
+    this.awaitingResultTts = true;
+    this.subtitle(`🐵 ${linxEsc(text)}`);
+    this.send({
+      session_id: this.sessionId,
+      type: 'listen',
+      state: 'detect',
+      text: onOver ? '结算播报' : '开场介绍',
+      text_response: text,
+    });
+    clearTimeout(this.speakTimer);
+    this.speakTimer = setTimeout(() => {
+      if (!this.awaitingResultTts) return;
+      this.awaitingResultTts = false;
+      this.speaking = false;
+      if (onOver) this.voiceNote('灵矽没有把声音发回来。看一下网络，以及智能体有没有配好声音。');
+    }, 8000);
+    return true;
+  }
+
+  speakResult(text) {
+    if (!text) return;
+    if (!this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.voiceNote('还没连上灵矽，所以没有朗读。回主页点「连接灵矽语音助手」。');
+      return;
+    }
+    if (this.playError) {
+      this.voiceNote(this.playError);
+      return;
+    }
+    if (this.speak(text, true)) this.voiceNote('正在朗读…');
+  }
+
+  // 离开结算页时立刻停掉正在念的结果，并丢掉还在路上的语音
+  stopSpeaking() {
+    clearTimeout(this.quietTimer);
+    clearTimeout(this.speakTimer);
+    const pending = this.speaking || this.awaitingResultTts;
+    this.awaitingResultTts = false;
+    this.speaking = false;
+    this.suppressTts = true;
+    this.opusQueue = [];
+    if (pending && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.send({ session_id: this.sessionId, type: 'abort', reason: 'back_to_menu' });
+      this.abortSent = true;
+    }
+    this.stopPlayback();
+    this.voiceNote('');
+    const sub = document.getElementById('linx-sub');
+    if (sub) sub.classList.add('hidden');
+  }
 
   // 只有主页 / 结算界面才收音和说话（收音由 onFrame 判断）；开麦校准、对局期间打断 TTS，
   // 否则 AI 的声音会被校准当成环境噪音、对局中也会被当成喊声触发起跳
@@ -335,9 +407,18 @@ class LinxClient {
         if (msg.text) this.emoji = msg.text;
         break;
       case 'tts':
+        if (this.suppressTts) {
+          if (msg.state === 'start' && this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.send({ session_id: this.sessionId, type: 'abort', reason: 'back_to_menu' });
+          }
+          break;
+        }
         if (msg.state === 'start') {
           this.speaking = true;
           this.abortSent = false;
+          this.awaitingResultTts = false;
+          this.voiceNote('正在朗读…');
+          clearTimeout(this.speakTimer);
           clearTimeout(this.quietTimer);
         } else if (msg.state === 'sentence_start') {
           this.subtitle(`${this.emoji || '🐵'} ${linxEsc(msg.text)}`);
@@ -345,7 +426,10 @@ class LinxClient {
           if (msg.is_aborted) this.stopPlayback();
           const left = this.ac ? Math.max(0, this.playAt - this.ac.currentTime) : 0;
           clearTimeout(this.quietTimer);
-          this.quietTimer = setTimeout(() => { this.speaking = false; }, left * 1000 + 300);
+          this.quietTimer = setTimeout(() => {
+            this.speaking = false;
+            if (this.game.mode === 'over') this.voiceNote('');
+          }, left * 1000 + 300);
         }
         break;
       case 'mcp':
@@ -360,40 +444,65 @@ class LinxClient {
     }
   }
 
-  /* ---------- 下行音频：PCM 直接播；Opus 用 WebCodecs 解码 ---------- */
+  /* ---------- 下行音频：PCM 直接播；Opus 用页面里的解码器（不依赖浏览器是否带 WebCodecs） ---------- */
   setupOpus() {
-    if (!('AudioDecoder' in window)) {
-      this.setStatus('当前浏览器不支持 Opus 解码（WebCodecs），只能显示字幕，建议用 Chrome / Edge', true);
+    const Ctor = window['opus-decoder'] && window['opus-decoder'].OpusDecoder;
+    if (!Ctor) {
+      this.playError = '页面没有加载声音解码器，灵矽的声音播不出来。请刷新后再试。';
       return;
     }
-    this.opusTs = 0;
-    this.decoder = new AudioDecoder({
-      output: (ad) => {
-        const f = new Float32Array(ad.numberOfFrames);
-        ad.copyTo(f, { planeIndex: 0, format: 'f32-planar' });
-        this.enqueue(f, ad.sampleRate);
-        ad.close();
-      },
-      error: (e) => console.warn('[linx] opus 解码失败', e),
+    const rate = [8000, 12000, 16000, 24000, 48000].includes(this.down.rate) ? this.down.rate : 24000;
+    this.opusQueue = [];
+    this.opusReady = false;
+    this.playError = '';
+    try {
+      this.opus = new Ctor({ sampleRate: rate });
+    } catch (e) {
+      this.playError = '声音解码器启动失败，灵矽的声音播不出来。';
+      return;
+    }
+    this.opus.ready.then(() => {
+      this.opusReady = true;
+      const q = this.opusQueue.splice(0);
+      q.forEach((b) => this.decodeOpus(b));
+    }).catch(() => {
+      this.playError = '声音解码器启动失败，灵矽的声音播不出来。';
+      this.voiceNote(this.playError);
     });
-    this.decoder.configure({ codec: 'opus', sampleRate: this.down.rate, numberOfChannels: 1 });
   }
 
   onAudio(buf) {
-    if (!this.down || !this.ac || !this.idle) return;
+    if (!this.down || !this.ac || !this.idle || this.suppressTts) return;
+    if (this.ac.state === 'suspended') this.ac.resume();
     if (this.down.format === 'pcm') {
       const pcm = new Int16Array(buf);
       const f = new Float32Array(pcm.length);
       for (let i = 0; i < pcm.length; i++) f[i] = pcm[i] / 0x8000;
       this.enqueue(f, this.down.rate);
-    } else if (this.decoder && this.decoder.state === 'configured') {
-      this.decoder.decode(new EncodedAudioChunk({ type: 'key', timestamp: this.opusTs, data: buf }));
-      this.opusTs += this.down.frameMs * 1000;
+    } else {
+      this.decodeOpus(new Uint8Array(buf));
     }
   }
 
+  decodeOpus(packet) {
+    if (!this.opusReady) {
+      if (this.opusQueue) this.opusQueue.push(packet);
+      return;
+    }
+    if (packet.length >= 16 && packet[0] === 0 && packet[1] === 2 && packet[3] <= 1) {
+      const size = (packet[12] << 24) | (packet[13] << 16) | (packet[14] << 8) | packet[15];
+      if (size > 0 && 16 + size <= packet.length) packet = packet.subarray(16, 16 + size);
+    }
+    if (!packet.length) return;
+    let result;
+    try { result = this.opus.decodeFrame(packet); } catch (e) { return; }
+    const samples = result && result.channelData && result.channelData[0];
+    if (samples && samples.length) this.enqueue(samples, result.sampleRate || this.down.rate);
+  }
+
   enqueue(samples, rate) {
-    if (!samples.length) return;
+    if (!samples.length || !this.ac) return;
+    if (this.ac.state === 'suspended') this.ac.resume();
     const buf = this.ac.createBuffer(1, samples.length, rate);
     buf.copyToChannel(samples, 0);
     const src = this.ac.createBufferSource();

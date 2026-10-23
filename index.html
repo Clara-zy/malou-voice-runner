@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>吗喽声控跑酷 · 别让吗喽掉进 Bug</title>
 <!-- 改了 js/css 记得把 ?v= 加一，避免浏览器混用新旧缓存 -->
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <div id="stage">
@@ -20,35 +20,47 @@
 
   <!-- 开始界面 -->
   <div id="screen-start" class="overlay">
-    <div class="panel">
-      <h1>🐵 吗喽声控跑酷</h1>
-      <p class="subtitle">—— 别让吗喽掉进 Bug ——</p>
-      <div class="rules">
-        <p>🚶 <b>吗喽自动匀速往前跑</b>，你只负责一件事：喊</p>
-        <p>😱 <b>看到障碍就大喊</b>：喊得越响，跳得越高越远</p>
-        <p>✈️ <b>纸飞机（需求变更）来袭</b>：闭嘴！起跳必死！</p>
+    <div class="panel panel-home">
+      <aside class="meme-card">
+        <div class="meme-tag">🪪 今日打卡</div>
+        <div class="meme-frame">
+          <img src="assets/meme-office-monkey.jpg" alt="戴眼镜挂工牌的吗喽在陆家嘴写字楼里敲键盘" draggable="false">
+        </div>
+        <p class="meme-caption">“工位能看东方明珠，<br>但我只看得见 Bug。”</p>
+        <div class="meme-stickers" aria-hidden="true">
+          <span>🍌 +1</span><span>☕ 续命中</span><span>🐛 ×99</span>
+        </div>
+      </aside>
+      <div class="home-main">
+        <h1>🐵 吗喽声控跑酷</h1>
+        <p class="subtitle">—— 别让吗喽掉进 Bug ——</p>
+        <div class="rules">
+          <p>🚶 <b>吗喽自动匀速往前跑</b>，你只负责一件事：喊</p>
+          <p>😱 <b>看到障碍就大喊</b>：喊得越响，跳得越高越远</p>
+          <p>✈️ <b>纸飞机（需求变更）来袭</b>：闭嘴！起跳必死！</p>
+        </div>
+        <div class="btn-row">
+          <button id="btn-mic" class="big">🎤 开麦上班</button>
+          <button id="btn-keyboard" class="ghost">⌨️ 空格调试模式（不开麦）</button>
+        </div>
+        <div id="calib-tip" class="hidden">🤫 请保持安静，正在测量环境噪音…</div>
+        <div id="mic-error" class="hidden"></div>
+        <div id="meter-box" class="hidden">
+          <div class="meter-title">🎤 实时音量：冲上红区就起跳，红区越深跳得越高</div>
+          <div id="meter"><div id="meter-fill"></div><div id="mark-jump" class="mk"></div></div>
+          <div class="meter-legend"><span>🤫 安静</span><span>🦘 跳（越响越高）</span></div>
+        </div>
+        <div id="sens-row">灵敏度
+          <input type="range" id="sens" min="0.6" max="1.8" step="0.1" value="1">
+          <span id="sens-val">1.0</span>
+        </div>
+        <div id="linx-row">
+          <button id="btn-linx" class="ghost">🗣️ 连接灵矽语音助手</button>
+          <span id="linx-status"></span>
+        </div>
+        <div id="lb-start"></div>
+        <p class="hint">F 全屏（投大屏更佳） · M 音效开关 · 开发调试：按住空格蓄力，松开模拟大喊</p>
       </div>
-      <div class="btn-row">
-        <button id="btn-mic" class="big">🎤 开麦上班</button>
-        <button id="btn-keyboard" class="ghost">⌨️ 空格调试模式（不开麦）</button>
-      </div>
-      <div id="calib-tip" class="hidden">🤫 请保持安静，正在测量环境噪音…</div>
-      <div id="mic-error" class="hidden"></div>
-      <div id="meter-box" class="hidden">
-        <div class="meter-title">🎤 实时音量：冲上红区就起跳，红区越深跳得越高</div>
-        <div id="meter"><div id="meter-fill"></div><div id="mark-jump" class="mk"></div></div>
-        <div class="meter-legend"><span>🤫 安静</span><span>🦘 跳（越响越高）</span></div>
-      </div>
-      <div id="sens-row">灵敏度
-        <input type="range" id="sens" min="0.6" max="1.8" step="0.1" value="1">
-        <span id="sens-val">1.0</span>
-      </div>
-      <div id="linx-row">
-        <button id="btn-linx" class="ghost">🗣️ 连接灵矽语音助手</button>
-        <span id="linx-status"></span>
-      </div>
-      <div id="lb-start"></div>
-      <p class="hint">F 全屏（投大屏更佳） · M 音效开关 · 开发调试：按住空格蓄力，松开模拟大喊</p>
     </div>
   </div>
 
@@ -60,6 +72,7 @@
       <p id="over-msg" class="over-msg"></p>
       <p id="over-tip" class="over-tip"></p>
       <p id="over-score" class="score-line"></p>
+      <p id="over-voice" class="over-tip"></p>
       <div id="over-save" class="save-row">
         <input id="name-input" maxlength="8" placeholder="留下花名/工号">
         <button id="btn-save" class="mid">上排行榜</button>
@@ -73,16 +86,17 @@
   <!-- 灵矽语音助手字幕 -->
   <div id="linx-sub" class="hidden"></div>
 </div>
-<script src="js/util.js?v=4"></script>
-<script src="js/config.js?v=4"></script>
-<script src="js/voice.js?v=4"></script>
-<script src="js/sfx.js?v=4"></script>
-<script src="js/world.js?v=4"></script>
-<script src="js/game.js?v=4"></script>
-<script src="js/render.js?v=4"></script>
-<script src="js/ui.js?v=4"></script>
-<script src="js/bridge.js?v=4"></script>
-<script src="js/main.js?v=4"></script>
-<script src="linx.js?v=4"></script>
+<script src="js/util.js?v=5"></script>
+<script src="js/config.js?v=5"></script>
+<script src="js/voice.js?v=5"></script>
+<script src="js/sfx.js?v=5"></script>
+<script src="js/world.js?v=5"></script>
+<script src="js/game.js?v=5"></script>
+<script src="js/render.js?v=5"></script>
+<script src="js/ui.js?v=5"></script>
+<script src="js/bridge.js?v=5"></script>
+<script src="js/main.js?v=5"></script>
+<script src="opus-decoder.min.js?v=1"></script>
+<script src="linx.js?v=9"></script>
 </body>
 </html>

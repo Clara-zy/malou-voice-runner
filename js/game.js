@@ -84,6 +84,12 @@ function isOverPit() {
 /* ================= 输入 ================= */
 addEventListener('keydown', (e) => {
   const k = e.key;
+  // Esc 全局处理：结算/校准中都能退回主页（名字输入框里的 Esc 也放行给页面）
+  if (k === 'Escape' || k === 'Esc') {
+    if (mode === 'over') { $('name-input').blur(); toMenu(); }
+    else if (mode === 'calib' || mode === 'ready') toMenu();
+    return;
+  }
   if (document.activeElement === $('name-input')) return; // 输花名时不响应任何游戏快捷键（含 F/M）
   if (k === 'f' || k === 'F') {
     if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
@@ -93,12 +99,7 @@ addEventListener('keydown', (e) => {
   if (k === 'm' || k === 'M') { muted = !muted; return; }
   if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) e.preventDefault();
   if (mode === 'over') {
-    if (k === 'Enter') { if (mode === 'over') resetRun(); }
-    else if (k === 'Escape') toMenu();
-    return;
-  }
-  if (mode === 'calib' || mode === 'ready') {
-    if (k === 'Escape') toMenu(); // 校准等不下去了也能退出（流程令牌会自动作废）
+    if (k === 'Enter') resetRun();
     return;
   }
   if (mode !== 'play') return;
@@ -200,6 +201,7 @@ function resetRun() {
 function toMenu() {
   mode = 'menu';
   Music.stop();
+  if (window.linx) window.linx.stopSpeaking(); // 回主页时停掉结算口播
   resetMicUI(); // 复位开麦按钮/音量条，支持「Esc 回来 → 重新校准」
   $('screen-over').classList.add('hidden');
   $('screen-start').classList.remove('hidden');
