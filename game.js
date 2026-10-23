@@ -165,11 +165,14 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (k === 'm' || k === 'M') { muted = !muted; return; }
+  if (k === 'Escape' || k === 'Esc') {
+    if (mode === 'over') { $('name-input').blur(); toMenu(); }
+    return;
+  }
   if (document.activeElement === $('name-input')) return;
   if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) e.preventDefault();
   if (mode === 'over') {
-    if (k === 'Enter') { if (mode === 'over') resetRun(); }
-    else if (k === 'Escape') toMenu();
+    if (k === 'Enter') resetRun();
     return;
   }
   if (mode !== 'play') return;
@@ -232,8 +235,14 @@ function resetRun() {
 
 function toMenu() {
   mode = 'menu';
+  if (window.linx) window.linx.stopSpeaking();
   $('screen-over').classList.add('hidden');
   $('screen-start').classList.remove('hidden');
+  const micBtn = $('btn-mic');
+  micBtn.disabled = false;
+  micBtn.textContent = '🎤 开麦上班';
+  $('calib-tip').textContent = '🤫 请保持安静，正在测量环境噪音…';
+  $('calib-tip').classList.add('hidden');
   $('lb-start').innerHTML = lbHTML(loadLB(), lastEntryTs);
 }
 
@@ -321,7 +330,11 @@ function doSave() {
   return rank;
 }
 $('btn-save').addEventListener('click', doSave);
-$('name-input').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') doSave(); });
+$('name-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' || e.key === 'Esc') return; // 留给页面：回主页
+  e.stopPropagation();
+  if (e.key === 'Enter') doSave();
+});
 $('btn-retry').addEventListener('click', () => { if (mode === 'over') resetRun(); });
 
 /* ================= 麦克风流程 ================= */
@@ -330,23 +343,25 @@ async function startMic() {
   const btn = $('btn-mic');
   if (btn.disabled) return;
   btn.disabled = true;
-  btn.textContent = '🎤 正在开启麦克风…';
   $('mic-error').classList.add('hidden');
-  try {
-    // 权限弹窗被忽略时会一直挂起，8 秒无响应就提示去看弹窗
-    await Promise.race([
-      voice.start(),
-      sleep(8000).then(() => { throw new Error('8 秒内没有响应——请检查浏览器顶部的麦克风权限弹窗'); }),
-    ]);
-  } catch (err) {
-    const why = err && err.name === 'NotAllowedError'
-      ? '麦克风权限被拒绝：请在地址栏允许麦克风后刷新页面'
-      : (err && err.message) || '未知错误';
-    $('mic-error').textContent = '麦克风开启失败：' + why + '。可先用键盘模式试玩。';
-    $('mic-error').classList.remove('hidden');
-    btn.disabled = false;
-    btn.textContent = '🎤 开麦上班';
-    return;
+  if (!voice.active) {
+    btn.textContent = '🎤 正在开启麦克风…';
+    try {
+      // 权限弹窗被忽略时会一直挂起，8 秒无响应就提示去看弹窗
+      await Promise.race([
+        voice.start(),
+        sleep(8000).then(() => { throw new Error('8 秒内没有响应——请检查浏览器顶部的麦克风权限弹窗'); }),
+      ]);
+    } catch (err) {
+      const why = err && err.name === 'NotAllowedError'
+        ? '麦克风权限被拒绝：请在地址栏允许麦克风后刷新页面'
+        : (err && err.message) || '未知错误';
+      $('mic-error').textContent = '麦克风开启失败：' + why + '。可先用键盘模式试玩。';
+      $('mic-error').classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = '🎤 开麦上班';
+      return;
+    }
   }
   btn.textContent = '🎤 麦克风已就绪';
   $('meter-box').classList.remove('hidden');
