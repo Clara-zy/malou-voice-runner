@@ -31,6 +31,19 @@
 
 自动演示：`?demo`（内置 AI 自动玩，投屏暖场 attract mode）；`?goal=3000` 缩短赛程便于测试。
 
+### 🗣️ 灵矽语音助手（可选）
+
+接入七牛 [灵矽 AI 平台](https://linx.qiniu.com/docs)，网页把自己当成一台设备，游戏操作注册成端侧 MCP 工具，
+在**主页 / 结算界面**直接说话控制菜单：「开始游戏」「再来一局」「灵敏度调低点」「把音效关了」「帮我上榜，花名小王」。
+
+- 只在主页 / 结算界面收音，对局中不上传（跳跃仍走本地音量判断，语音识别往返太慢）
+- 首次接入：开始界面点「🗣️ 连接灵矽语音助手」→ 页面显示 6 位激活码 → 在
+  [灵矽智控台](https://xrobo.qiniu.com/) 智能体的「设备管理」里新增设备、填激活码 → 页面自动连上。
+  没出激活码但回答的不是你的智能体时，用状态栏里的设备 ID（MAC）在「设备管理 → 批量导入」绑定后重连
+- 智能体需要开启支持工具调用的意图识别（Function Call），才会调用游戏工具
+- 设备身份存在浏览器 localStorage（`linx.deviceId` / `linx.clientId`），换浏览器算一台新设备
+- 推荐 Chrome / Edge；协议细节见 [linx.js](linx.js) 顶部注释
+
 ## 运行
 
 Chrome / Edge / Safari。麦克风要求 `localhost` 或 HTTPS：
@@ -69,7 +82,9 @@ malou/
 │   ├── game.js           #   状态机、物理、计分、发疯值、输入（键盘/空格/触摸）
 │   ├── render.js         #   全部 Canvas 绘制（含粒子/HUD）
 │   ├── ui.js             #   DOM 界面、排行榜、麦克风流程
+│   ├── bridge.js         #   window.Game 对外接口（灵矽语音助手的 MCP 工具层）
 │   └── main.js           #   主循环、启动、SW 注册
+├── linx.js               # 灵矽语音助手：OTA 激活、WebSocket 语音会话、端侧 MCP 工具
 ├── sw.js                 # Service Worker（离线缓存）
 ├── manifest.webmanifest  # PWA 清单
 ├── icon.svg / icon-*.png # 图标

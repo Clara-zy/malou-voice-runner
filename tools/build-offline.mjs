@@ -19,9 +19,9 @@ html = html.replace(
   () => '<style>\n' + readFileSync(join(root, 'style.css'), 'utf8') + '</style>'
 );
 
-// 内联全部脚本（按 index.html 中的出现顺序，保持依赖顺序）
+// 内联全部脚本（按 index.html 中的出现顺序，保持依赖顺序；兼容 ?v= 版本号）
 html = html.replace(/<script src="[^"]+"><\/script>/g, (tag) => {
-  const src = tag.match(/src="([^"]+)"/)[1];
+  const src = tag.match(/src="([^"]+)"/)[1].split('?')[0];
   return '<script>\n' + readFileSync(join(root, src), 'utf8') + '\n</script>';
 });
 

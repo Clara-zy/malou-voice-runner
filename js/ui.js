@@ -70,25 +70,27 @@ function showOver() {
 }
 
 function doSave() {
-  if (saved) return;
+  if (saved) return -1;
   const name = $('name-input').value.trim() || '匿名吗喽';
   try { localStorage.setItem(NAME_KEY, name); } catch (e) {}
-  addScore(name, pendingScore);
+  const rank = addScore(name, pendingScore);
   lastEntryTs = Date.now();
   saved = true;
   $('btn-save').disabled = true;
   $('btn-save').textContent = '已上榜 ✓';
   $('lb-over').innerHTML = lbHTML(loadLB(), lastEntryTs);
   $('name-input').blur(); // 让 Enter 重开不再被输入框拦下
+  return rank;
 }
 $('btn-save').addEventListener('click', doSave);
 $('name-input').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') doSave(); });
 $('btn-retry').addEventListener('click', () => { if (mode === 'over') resetRun(); });
 
 /* ================= 麦克风流程 ================= */
-$('btn-mic').addEventListener('click', async () => {
+async function startMic() {
   SFX.ensure();
   const btn = $('btn-mic');
+  if (btn.disabled) return;
   btn.disabled = true;
   btn.textContent = '🎤 正在开启麦克风…';
   $('mic-error').classList.add('hidden');
@@ -126,7 +128,8 @@ $('btn-mic').addEventListener('click', async () => {
   mode = 'ready';
   await sleep(2600);
   resetRun();
-});
+}
+$('btn-mic').addEventListener('click', startMic);
 
 $('btn-keyboard').addEventListener('click', () => {
   SFX.ensure();

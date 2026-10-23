@@ -11,7 +11,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>吗喽声控跑酷 · 别让吗喽掉进 Bug</title>
-<link rel="stylesheet" href="style.css">
+<!-- 改了 js/css 记得把 ?v= 加一，避免浏览器混用新旧缓存 -->
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <div id="stage">
@@ -42,6 +43,10 @@
         <input type="range" id="sens" min="0.6" max="1.8" step="0.1" value="1">
         <span id="sens-val">1.0</span>
       </div>
+      <div id="linx-row">
+        <button id="btn-linx" class="ghost">🗣️ 连接灵矽语音助手</button>
+        <span id="linx-status"></span>
+      </div>
       <div id="lb-start"></div>
       <p class="hint">F 全屏（投大屏更佳） · M 音效开关 · 开发调试：按住空格蓄力，松开模拟大喊</p>
     </div>
@@ -64,15 +69,20 @@
       <p class="hint">Enter 重开 · Esc 回主页</p>
     </div>
   </div>
+
+  <!-- 灵矽语音助手字幕 -->
+  <div id="linx-sub" class="hidden"></div>
 </div>
-<script src="js/util.js"></script>
-<script src="js/config.js"></script>
-<script src="js/voice.js"></script>
-<script src="js/sfx.js"></script>
-<script src="js/world.js"></script>
-<script src="js/game.js"></script>
-<script src="js/render.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/main.js"></script>
+<script src="js/util.js?v=4"></script>
+<script src="js/config.js?v=4"></script>
+<script src="js/voice.js?v=4"></script>
+<script src="js/sfx.js?v=4"></script>
+<script src="js/world.js?v=4"></script>
+<script src="js/game.js?v=4"></script>
+<script src="js/render.js?v=4"></script>
+<script src="js/ui.js?v=4"></script>
+<script src="js/bridge.js?v=4"></script>
+<script src="js/main.js?v=4"></script>
+<script src="linx.js?v=4"></script>
 </body>
 </html>

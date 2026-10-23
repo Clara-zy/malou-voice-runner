@@ -11,107 +11,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>吗喽声控跑酷 · 别让吗喽掉进 Bug</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { height: 100%; }
-body {
-  overflow: hidden;
-  display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(1200px 700px at 50% 18%, #17224a 0%, #0b1020 58%, #060913 100%);
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
-  user-select: none; -webkit-user-select: none;
-}
-#stage { position: relative; width: 1280px; height: 720px; flex: none; touch-action: none; }
-#game {
-  display: block; width: 100%; height: 100%;
-  border-radius: 14px;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, .55);
-  touch-action: none; /* 长按蓄力时别触发系统手势 */
-}
-.overlay { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; }
-.hidden { display: none !important; }
-
-.panel {
-  background: rgba(9, 14, 30, .9);
-  border: 1px solid rgba(130, 165, 255, .22);
-  border-radius: 22px;
-  padding: 28px 48px 24px;
-  text-align: center;
-  color: #eef2ff;
-  box-shadow: 0 24px 90px rgba(0, 0, 0, .6);
-  max-width: 800px; max-height: 97%;
-  overflow: auto;
-  backdrop-filter: blur(8px);
-}
-
-h1 { font-size: 44px; letter-spacing: 2px; }
-.subtitle { color: #9fb0e8; margin: 4px 0 14px; font-size: 19px; letter-spacing: 6px; }
-.rules { text-align: left; display: inline-block; margin-bottom: 16px; font-size: 19px; line-height: 1.85; color: #dfe6ff; }
-.rules b { color: #ffd34d; }
-
-.btn-row { display: flex; gap: 14px; justify-content: center; margin-bottom: 12px; }
-button { font-family: inherit; cursor: pointer; }
-button.big {
-  font-size: 23px; font-weight: 700; color: #3a2500;
-  background: linear-gradient(180deg, #ffd95e, #ffb020);
-  border: none; border-radius: 14px; padding: 14px 36px;
-  box-shadow: 0 6px 0 #b97e00;
-}
-button.big:active { transform: translateY(3px); box-shadow: 0 3px 0 #b97e00; }
-button.big:disabled { filter: grayscale(.6); opacity: .75; cursor: wait; }
-button.ghost {
-  font-size: 17px; color: #cdd8ff; background: transparent;
-  border: 1.5px solid rgba(150, 180, 255, .4); border-radius: 12px; padding: 12px 22px;
-}
-button.ghost:hover { background: rgba(120, 150, 255, .12); }
-button.mid {
-  font-size: 17px; font-weight: 700; color: #3a2500;
-  background: #ffd34d; border: none; border-radius: 10px; padding: 10px 18px;
-}
-button.mid:disabled { background: #58c16b; color: #06240e; }
-
-#calib-tip { color: #ffd34d; font-size: 18px; margin: 6px 0; }
-#mic-error { color: #ff8a8a; font-size: 15px; margin: 8px auto; max-width: 540px; line-height: 1.6; }
-
-#meter-box { margin: 8px auto 2px; }
-.meter-title { font-size: 16px; color: #cdd8ff; margin-bottom: 8px; }
-#meter {
-  position: relative; width: 430px; height: 30px; margin: 0 auto;
-  border-radius: 9px; overflow: hidden;
-  border: 1px solid rgba(140, 165, 255, .35);
-  background: linear-gradient(90deg,
-    rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, .08) 59%,
-    rgba(229, 72, 77, .45) 59%, rgba(229, 72, 77, .45) 100%);
-}
-#meter-fill { position: absolute; top: 0; left: 0; bottom: 0; width: 0; background: rgba(255, 255, 255, .5); }
-.mk { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fff; }
-.meter-legend { display: flex; justify-content: space-between; width: 430px; margin: 5px auto 0; font-size: 14px; color: #9fb0e8; }
-
-#sens-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 2px; color: #9fb0e8; font-size: 15px; }
-#sens { width: 180px; accent-color: #ffd34d; }
-
-.lb { list-style: none; text-align: left; width: 340px; margin: 12px auto 4px; font-size: 17px; }
-.lb li { display: flex; align-items: center; gap: 10px; padding: 4px 10px; border-radius: 8px; }
-.lb li.me { background: rgba(255, 211, 77, .16); }
-.lb .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb .sc { color: #ffd34d; font-weight: 700; }
-.lb-empty { color: #8fa0d8; font-size: 15px; margin: 10px 0; }
-
-.emoji-big { font-size: 72px; line-height: 1.25; }
-h2 { font-size: 38px; margin: 2px 0 10px; }
-.over-msg { font-size: 19px; color: #dfe6ff; margin-bottom: 4px; }
-.over-tip { font-size: 15px; color: #9fb0e8; margin-bottom: 8px; }
-.score-line { font-size: 26px; font-weight: 800; color: #ffd34d; margin: 6px 0 12px; }
-.save-row { display: flex; gap: 10px; justify-content: center; margin-bottom: 4px; }
-#name-input {
-  font-size: 18px; padding: 10px 14px; width: 220px;
-  color: #eef2ff; background: rgba(255, 255, 255, .08);
-  border: 1.5px solid rgba(150, 180, 255, .4); border-radius: 10px; outline: none;
-  font-family: inherit; text-align: center;
-}
-#name-input:focus { border-color: #ffd34d; }
-.hint { color: #7c8cc0; font-size: 14px; margin-top: 12px; }
-</style>
+<!-- 改了 js/css 记得把 ?v= 加一，避免浏览器混用新旧缓存 -->
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <div id="stage">
@@ -142,6 +43,10 @@ h2 { font-size: 38px; margin: 2px 0 10px; }
         <input type="range" id="sens" min="0.6" max="1.8" step="0.1" value="1">
         <span id="sens-val">1.0</span>
       </div>
+      <div id="linx-row">
+        <button id="btn-linx" class="ghost">🗣️ 连接灵矽语音助手</button>
+        <span id="linx-status"></span>
+      </div>
       <div id="lb-start"></div>
       <p class="hint">F 全屏（投大屏更佳） · M 音效开关 · 开发调试：按住空格蓄力，松开模拟大喊</p>
     </div>
@@ -164,6 +69,9 @@ h2 { font-size: 38px; margin: 2px 0 10px; }
       <p class="hint">Enter 重开 · Esc 回主页</p>
     </div>
   </div>
+
+  <!-- 灵矽语音助手字幕 -->
+  <div id="linx-sub" class="hidden"></div>
 </div>
 <script>
 'use strict';
@@ -1337,25 +1245,27 @@ function showOver() {
 }
 
 function doSave() {
-  if (saved) return;
+  if (saved) return -1;
   const name = $('name-input').value.trim() || '匿名吗喽';
   try { localStorage.setItem(NAME_KEY, name); } catch (e) {}
-  addScore(name, pendingScore);
+  const rank = addScore(name, pendingScore);
   lastEntryTs = Date.now();
   saved = true;
   $('btn-save').disabled = true;
   $('btn-save').textContent = '已上榜 ✓';
   $('lb-over').innerHTML = lbHTML(loadLB(), lastEntryTs);
   $('name-input').blur(); // 让 Enter 重开不再被输入框拦下
+  return rank;
 }
 $('btn-save').addEventListener('click', doSave);
 $('name-input').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') doSave(); });
 $('btn-retry').addEventListener('click', () => { if (mode === 'over') resetRun(); });
 
 /* ================= 麦克风流程 ================= */
-$('btn-mic').addEventListener('click', async () => {
+async function startMic() {
   SFX.ensure();
   const btn = $('btn-mic');
+  if (btn.disabled) return;
   btn.disabled = true;
   btn.textContent = '🎤 正在开启麦克风…';
   $('mic-error').classList.add('hidden');
@@ -1393,7 +1303,8 @@ $('btn-mic').addEventListener('click', async () => {
   mode = 'ready';
   await sleep(2600);
   resetRun();
-});
+}
+$('btn-mic').addEventListener('click', startMic);
 
 $('btn-keyboard').addEventListener('click', () => {
   SFX.ensure();
@@ -1411,6 +1322,59 @@ function updateMeterDOM() {
   $('meter-fill').style.width = clamp(voice.level / maxV * 100, 0, 100) + '%';
   $('mark-jump').style.left = (100 / 1.7) + '%';
 }
+
+</script>
+<script>
+'use strict';
+
+/* ================= 对外接口（linx.js 语音助手把它们注册成 MCP 工具） =================
+ * 自 main 合并移植：原实现在单文件 game.js 尾部，模块化后独立成桥接层。
+ * goal 从赛程参数推导（?goal= 缩短赛程时语音播报的行数保持一致）。 */
+window.Game = {
+  get mode() { return mode; },
+  status() {
+    return {
+      screen: mode, // menu 主页 | calib/ready 开麦校准中 | play 对局中 | over 结算
+      score: mode === 'over' ? pendingScore : curScore(),
+      goal: Math.floor(GOAL_DIST / SCORE.PX_PER_LINE),
+      result: mode !== 'over' ? null : winInfo ? '上线成功' : (DEATHS[deathKey(deadInfo)] || DEATHS.pit)[1],
+      sensitivity: voice.sens,
+      sound: !muted,
+      mic: voice.active,
+      leaderboard: loadLB().slice(0, 5).map((e) => ({ name: e.name, score: e.score })),
+    };
+  },
+  start() {
+    if (mode === 'play') return '已经在对局中了';
+    if (mode === 'calib' || mode === 'ready') return '正在开麦校准，马上自动开局';
+    if (voice.active || DEMO) { resetRun(); return '开局倒计时开始'; }
+    startMic();
+    return '正在开麦：先安静 2 秒校准环境噪音，然后自动开局';
+  },
+  backToMenu() {
+    if (mode !== 'over') return '只有结算界面才能回主页，当前界面：' + mode;
+    toMenu();
+    return '已回到主页';
+  },
+  setSensitivity(v) {
+    v = clamp(Math.round(Number(v) * 10) / 10 || 1, 0.6, 1.8);
+    voice.sens = v;
+    $('sens').value = v;
+    $('sens-val').textContent = v.toFixed(1);
+    return `灵敏度已设为 ${v.toFixed(1)}`;
+  },
+  setSound(on) {
+    muted = !on;
+    return on ? '音效已打开' : '音效已关闭';
+  },
+  saveScore(name) {
+    if (mode !== 'over' || DEMO) return '只有结算界面才能上排行榜';
+    if (saved) return '本局成绩已经上过榜了';
+    if (name) $('name-input').value = String(name).trim().slice(0, 8);
+    const rank = doSave();
+    return rank < 10 ? `已上榜，排第 ${rank + 1} 名，${pendingScore} 行代码` : `已记录，${pendingScore} 行代码，可惜没进前十`;
+  },
+};
 
 </script>
 <script>
@@ -1444,6 +1408,516 @@ if (DEMO) resetRun(); // demo 走声控路径（demoVol），不启用键盘分�
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+</script>
+<script>
+'use strict';
+
+/**
+ * 灵矽（Linx）语音助手：浏览器扮演一台「设备」接入七牛灵矽 AI 平台，
+ * 把游戏操作注册成端侧 MCP 工具，玩家说「开始游戏」「灵敏度调低点」就能驱动菜单。
+ *
+ * 只在主页 / 结算界面收音：对局中的吼叫不上传（ASR 往返太慢，跳跃仍走 audio.js 的音量判断）。
+ * 协议文档：https://linx.qiniu.com/docs/xrobot/platform/websocket
+ *           https://linx.qiniu.com/docs/xrobot/mcp/hardware-mcp
+ */
+const LINX_OTA = 'https://xrobo.qiniuapi.com/v1/ota/';
+const LINX_CONSOLE = 'https://xrobo.qiniu.com/';
+const LINX_RATE = 16000, LINX_FRAME = 320; // 上行 PCM16 单声道 20ms 一帧
+// 服务端不做断句，要设备端自己判断一句话的起止（下面帧数都按 20ms 一帧算）
+const LINX_VAD_MIN = 0.02;    // 开口音量下限（RMS），实际门槛 = max(下限, 噪音底 × 3)
+const LINX_PREROLL = 15;      // 开口前补发 300ms，免得吞掉第一个字
+const LINX_END_FRAMES = 35;   // 安静 700ms 算一句说完
+const LINX_MAX_FRAMES = 400;  // 一句最长 8 秒，现场持续嘈杂也能收尾
+
+// 麦克风采样率（通常 48k）→ 16k：按窗口取平均降采样，攒满一帧发给主线程
+const LINX_WORKLET = `
+class LinxPcm16k extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.ratio = sampleRate / ${LINX_RATE};
+    this.pos = 0; this.acc = 0; this.cnt = 0;
+    this.buf = new Int16Array(${LINX_FRAME}); this.n = 0;
+  }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch) return true;
+    for (let i = 0; i < ch.length; i++) {
+      this.acc += ch[i]; this.cnt++; this.pos++;
+      if (this.pos < this.ratio) continue;
+      this.pos -= this.ratio;
+      const s = Math.max(-1, Math.min(1, this.acc / this.cnt));
+      this.acc = 0; this.cnt = 0;
+      this.buf[this.n++] = s * 0x7fff;
+      if (this.n === this.buf.length) {
+        this.port.postMessage(this.buf.buffer, [this.buf.buffer]);
+        this.buf = new Int16Array(${LINX_FRAME}); this.n = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('linx-pcm16k', LinxPcm16k);
+`;
+
+function linxIdentity() {
+  let id = localStorage.getItem('linx.deviceId');
+  let cid = localStorage.getItem('linx.clientId');
+  if (!id) {
+    const b = crypto.getRandomValues(new Uint8Array(6));
+    b[0] = (b[0] & 0xfe) | 0x02; // 本地管理的单播 MAC，不会和真实网卡撞号
+    id = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(':').toUpperCase();
+    localStorage.setItem('linx.deviceId', id);
+  }
+  if (!cid) {
+    cid = crypto.randomUUID();
+    localStorage.setItem('linx.clientId', cid);
+  }
+  return { id, cid };
+}
+
+class LinxClient {
+  constructor(game) {
+    this.game = game;
+    this.gen = 0;          // 每次连接/断开 +1，用来作废还在路上的异步流程
+    this.ws = null;
+    this.ac = null;        // 收音和播放共用一个 AudioContext
+    this.ready = false;    // hello 握手完成
+    this.listening = false; // 正在上传一句话
+    this.floor = 0.005;    // 环境噪音底（RMS），安静时自适应
+    this.preroll = [];
+    this.loud = 0;
+    this.quiet = 0;
+    this.uttFrames = 0;
+    this.speaking = false; // 正在播 TTS：期间不上传音频，免得 AI 听见自己
+    this.playAt = 0;
+    this.sources = new Set();
+    this.subTs = 0;
+    this.tools = this.buildTools();
+    setInterval(() => this.tick(), 200);
+  }
+
+  /* ---------- UI ---------- */
+  setStatus(html, err) {
+    const el = document.getElementById('linx-status');
+    el.innerHTML = html;
+    el.classList.toggle('err', !!err);
+  }
+  setButton(text) { document.getElementById('btn-linx').textContent = text; }
+  subtitle(html) {
+    document.getElementById('linx-sub').innerHTML = html;
+    this.subTs = performance.now();
+  }
+
+  /* ---------- 连接流程：OTA 激活 → WebSocket 握手 → 开麦 ---------- */
+  toggle() {
+    if (this.ws || this.busy) this.disconnect('已断开');
+    else this.connect();
+  }
+
+  async connect() {
+    const gen = ++this.gen;
+    this.busy = true;
+    this.setButton('🗣️ 连接中…（点击取消）');
+    try {
+      if (!this.ac) this.ac = new (window.AudioContext || window.webkitAudioContext)();
+      await this.ac.resume(); // 必须在点击手势里调用
+      const cfg = await this.activate(gen);
+      if (gen !== this.gen) return;
+      this.setStatus('正在连接灵矽…');
+      await this.openSocket(cfg, gen);
+      if (gen !== this.gen) return;
+      await this.startMic();
+      if (gen !== this.gen) return;
+      this.busy = false;
+      this.setButton('🗣️ 断开灵矽');
+      this.setStatus(`✅ 已连接：在主页或结算界面说「开始游戏」「灵敏度调低点」「帮我上榜，花名小王」试试<br>
+        设备 ID <code>${linxIdentity().id}</code>（不是你的智能体在回答？到 <a href="${LINX_CONSOLE}" target="_blank" rel="noopener">智控台</a> → 设备管理 → 批量导入，填这个 MAC 后重连）`);
+    } catch (e) {
+      if (gen !== this.gen) return;
+      this.disconnect('连接失败：' + (e && e.message || e), true);
+    }
+  }
+
+  async ota() {
+    const { id, cid } = linxIdentity();
+    const res = await fetch(LINX_OTA, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Device-Id': id, 'Client-Id': cid, 'Activation-Version': '1' },
+      body: JSON.stringify({
+        uuid: cid,
+        mac_address: id,
+        application: { name: 'malou-voice-runner', version: '1.0.0', elf_sha256: '0'.repeat(64) },
+        board: { type: 'malou-web', ssid: 'browser', rssi: 0 },
+      }),
+    });
+    if (!res.ok) throw new Error(`OTA 请求失败（HTTP ${res.status}）`);
+    const data = await res.json();
+    if (data.error) throw new Error('OTA 返回错误：' + data.error);
+    return data;
+  }
+
+  // 未绑定的设备会拿到 6 位激活码：在智控台绑定后轮询激活状态，再重新 OTA 拿 token
+  async activate(gen) {
+    this.setStatus('正在向灵矽上报设备…');
+    for (;;) {
+      const data = await this.ota();
+      if (gen !== this.gen) return null;
+      if (data.websocket && data.websocket.token) return data.websocket;
+      if (!data.activation) throw new Error('OTA 没有返回连接信息');
+      this.setStatus(`激活码 <b>${data.activation.code}</b>：打开 <a href="${LINX_CONSOLE}" target="_blank" rel="noopener">灵矽智控台</a> → 选择智能体 → 添加设备，填入激活码，绑定后自动连接…`);
+      await this.waitBound(gen);
+      if (gen !== this.gen) return null;
+    }
+  }
+
+  async waitBound(gen) {
+    const { id } = linxIdentity();
+    while (gen === this.gen) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const res = await fetch(LINX_OTA + 'activate', { method: 'POST', headers: { 'Device-Id': id } });
+        if (res.status === 200 && (await res.text()).trim() === 'success') return;
+      } catch (e) { /* 网络抖动，继续轮询 */ }
+    }
+  }
+
+  // 浏览器 WebSocket 不能自定义请求头，鉴权参数改放到 URL query 里
+  openSocket(cfg, gen) {
+    const { id, cid } = linxIdentity();
+    const url = new URL(cfg.url.replace(/^ws:/, 'wss:'));
+    url.searchParams.set('device-id', id);
+    url.searchParams.set('client-id', cid);
+    url.searchParams.set('authorization', 'Bearer ' + cfg.token);
+    url.searchParams.set('protocol-version', '1');
+
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(url);
+      ws.binaryType = 'arraybuffer';
+      this.ws = ws;
+      const timer = setTimeout(() => reject(new Error('10 秒内没有收到 hello 响应')), 10000);
+      ws.onopen = () => ws.send(JSON.stringify({
+        type: 'hello',
+        version: 1,
+        features: { mcp: true, notify: { config_updated: true } },
+        transport: 'websocket',
+        audio_params: {
+          format: 'pcm', sample_rate: LINX_RATE, channels: 1, bit_depth: 16, endianness: 'little',
+          frame_duration: 20, frame_size: LINX_FRAME, sample_format: 'signed_int16', play_buffer_duration: 1000,
+        },
+      }));
+      ws.onmessage = (e) => {
+        if (gen !== this.gen) return;
+        if (typeof e.data !== 'string') { this.onAudio(e.data); return; }
+        let msg;
+        try { msg = JSON.parse(e.data); } catch (err) { return; }
+        console.debug('[linx]', msg);
+        if (msg.type === 'hello' && !this.ready) {
+          clearTimeout(timer);
+          this.onHello(msg);
+          resolve();
+        } else {
+          this.onMessage(msg);
+        }
+      };
+      ws.onclose = (e) => {
+        clearTimeout(timer);
+        reject(new Error(e.reason || `连接被关闭（${e.code}）`));
+        if (gen === this.gen && this.ready) this.disconnect('灵矽连接已断开' + (e.reason ? '：' + e.reason : ''), true);
+      };
+    });
+  }
+
+  async startMic() {
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+    });
+    if (!this.workletLoaded) {
+      const url = URL.createObjectURL(new Blob([LINX_WORKLET], { type: 'application/javascript' }));
+      await this.ac.audioWorklet.addModule(url);
+      URL.revokeObjectURL(url);
+      this.workletLoaded = true;
+    }
+    this.src = this.ac.createMediaStreamSource(this.stream);
+    this.node = new AudioWorkletNode(this.ac, 'linx-pcm16k', { numberOfOutputs: 0 });
+    this.node.port.onmessage = (e) => this.onFrame(e.data);
+    this.src.connect(this.node);
+  }
+
+  /* ---------- 上行：按音量断句，一句话 = listen start → 音频帧 → 空帧 + listen stop ---------- */
+  onFrame(buf) {
+    const pcm = new Int16Array(buf);
+    let sum = 0;
+    for (let i = 0; i < pcm.length; i++) sum += pcm[i] * pcm[i];
+    const rms = Math.sqrt(sum / pcm.length) / 0x8000;
+
+    const open = this.ready && this.idle && !this.speaking && this.ws && this.ws.readyState === WebSocket.OPEN;
+    if (!open) {
+      if (this.listening) this.endUtterance();
+      this.preroll.length = 0;
+      this.loud = 0;
+      return;
+    }
+
+    if (!this.listening) {
+      this.floor = rms < this.floor * 3 ? this.floor * 0.95 + rms * 0.05 : this.floor * 0.999 + rms * 0.001;
+      this.preroll.push(buf);
+      if (this.preroll.length > LINX_PREROLL) this.preroll.shift();
+      this.loud = rms > Math.max(LINX_VAD_MIN, this.floor * 3) ? this.loud + 1 : 0;
+      if (this.loud >= 3) this.beginUtterance();
+      return;
+    }
+
+    this.ws.send(buf);
+    this.uttFrames++;
+    this.quiet = rms > Math.max(LINX_VAD_MIN * 0.6, this.floor * 2) ? 0 : this.quiet + 1;
+    if (this.quiet >= LINX_END_FRAMES || this.uttFrames >= LINX_MAX_FRAMES) this.endUtterance();
+  }
+
+  beginUtterance() {
+    this.send({ session_id: this.sessionId, type: 'listen', state: 'start', mode: 'realtime' });
+    this.listening = true;
+    this.loud = 0;
+    this.quiet = 0;
+    this.uttFrames = 0;
+    this.preroll.forEach((f) => this.ws.send(f));
+    this.preroll = [];
+    this.subtitle('<span class="me">🗣️ …</span>');
+  }
+
+  endUtterance() {
+    this.listening = false;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(new Uint8Array(0));
+    this.send({ session_id: this.sessionId, type: 'listen', state: 'stop', mode: 'realtime' });
+  }
+
+  disconnect(reason, err) {
+    this.gen++;
+    this.busy = false;
+    this.ready = false;
+    this.listening = false;
+    this.speaking = false;
+    this.preroll = [];
+    this.loud = 0;
+    clearTimeout(this.quietTimer);
+    if (this.ws) { this.ws.onclose = null; this.ws.close(); this.ws = null; }
+    if (this.src) { this.src.disconnect(); this.src = null; }
+    if (this.node) { this.node.port.onmessage = null; this.node = null; }
+    if (this.stream) { this.stream.getTracks().forEach((t) => t.stop()); this.stream = null; }
+    if (this.decoder) { try { this.decoder.close(); } catch (e) {} this.decoder = null; }
+    this.stopPlayback();
+    this.setButton('🗣️ 连接灵矽语音助手');
+    this.setStatus(reason || '', err);
+  }
+
+  /* ---------- 会话 ---------- */
+  send(obj) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
+  }
+
+  onHello(msg) {
+    this.ready = true;
+    this.sessionId = msg.session_id || '';
+    const ap = msg.audio_params || {};
+    this.down = { format: ap.format || 'opus', rate: ap.sample_rate || 24000, frameMs: ap.frame_duration || 60 };
+    if (this.down.format === 'opus') this.setupOpus();
+  }
+
+  get idle() { return this.game.mode === 'menu' || this.game.mode === 'over'; }
+
+  // 只有主页 / 结算界面才收音和说话（收音由 onFrame 判断）；开麦校准、对局期间打断 TTS，
+  // 否则 AI 的声音会被校准当成环境噪音、对局中也会被当成喊声触发起跳
+  tick() {
+    if (!this.idle && this.speaking && !this.abortSent) {
+      this.send({ session_id: this.sessionId, type: 'abort', reason: 'game_started' });
+      this.abortSent = true;
+      this.stopPlayback();
+    }
+    const sub = document.getElementById('linx-sub');
+    const stale = performance.now() - this.subTs > 8000 && !this.speaking;
+    sub.classList.toggle('hidden', !this.ready || stale || this.game.mode === 'play');
+  }
+
+  onMessage(msg) {
+    switch (msg.type) {
+      case 'stt':
+        this.subtitle(`<span class="me">🗣️ ${linxEsc(msg.text)}</span>`);
+        break;
+      case 'llm':
+        if (msg.text) this.emoji = msg.text;
+        break;
+      case 'tts':
+        if (msg.state === 'start') {
+          this.speaking = true;
+          this.abortSent = false;
+          clearTimeout(this.quietTimer);
+        } else if (msg.state === 'sentence_start') {
+          this.subtitle(`${this.emoji || '🐵'} ${linxEsc(msg.text)}`);
+        } else if (msg.state === 'stop') {
+          if (msg.is_aborted) this.stopPlayback();
+          const left = this.ac ? Math.max(0, this.playAt - this.ac.currentTime) : 0;
+          clearTimeout(this.quietTimer);
+          this.quietTimer = setTimeout(() => { this.speaking = false; }, left * 1000 + 300);
+        }
+        break;
+      case 'mcp':
+        this.onMcp(msg.payload || {});
+        break;
+      case 'notify':
+        if (msg.event === 'config_updated') {
+          this.disconnect('智能体配置已更新，正在重连…');
+          this.connect();
+        }
+        break;
+    }
+  }
+
+  /* ---------- 下行音频：PCM 直接播；Opus 用 WebCodecs 解码 ---------- */
+  setupOpus() {
+    if (!('AudioDecoder' in window)) {
+      this.setStatus('当前浏览器不支持 Opus 解码（WebCodecs），只能显示字幕，建议用 Chrome / Edge', true);
+      return;
+    }
+    this.opusTs = 0;
+    this.decoder = new AudioDecoder({
+      output: (ad) => {
+        const f = new Float32Array(ad.numberOfFrames);
+        ad.copyTo(f, { planeIndex: 0, format: 'f32-planar' });
+        this.enqueue(f, ad.sampleRate);
+        ad.close();
+      },
+      error: (e) => console.warn('[linx] opus 解码失败', e),
+    });
+    this.decoder.configure({ codec: 'opus', sampleRate: this.down.rate, numberOfChannels: 1 });
+  }
+
+  onAudio(buf) {
+    if (!this.down || !this.ac || !this.idle) return;
+    if (this.down.format === 'pcm') {
+      const pcm = new Int16Array(buf);
+      const f = new Float32Array(pcm.length);
+      for (let i = 0; i < pcm.length; i++) f[i] = pcm[i] / 0x8000;
+      this.enqueue(f, this.down.rate);
+    } else if (this.decoder && this.decoder.state === 'configured') {
+      this.decoder.decode(new EncodedAudioChunk({ type: 'key', timestamp: this.opusTs, data: buf }));
+      this.opusTs += this.down.frameMs * 1000;
+    }
+  }
+
+  enqueue(samples, rate) {
+    if (!samples.length) return;
+    const buf = this.ac.createBuffer(1, samples.length, rate);
+    buf.copyToChannel(samples, 0);
+    const src = this.ac.createBufferSource();
+    src.buffer = buf;
+    src.connect(this.ac.destination);
+    const t = Math.max(this.playAt, this.ac.currentTime + 0.06);
+    src.start(t);
+    this.playAt = t + buf.duration;
+    this.sources.add(src);
+    src.onended = () => this.sources.delete(src);
+  }
+
+  stopPlayback() {
+    this.sources.forEach((s) => { try { s.stop(); } catch (e) {} });
+    this.sources.clear();
+    this.playAt = 0;
+  }
+
+  /* ---------- 端侧 MCP：把游戏操作暴露成工具 ---------- */
+  buildTools() {
+    const g = this.game;
+    const none = { type: 'object', properties: {}, required: [] };
+    return [
+      {
+        name: 'self.game.get_status',
+        description: '获取吗喽声控跑酷的当前状态：screen 当前界面（menu 主页 / calib、ready 开麦校准中 / play 对局中 / over 结算）、本局成绩（行代码，满分 1000）、结局、灵敏度、音效开关、排行榜前五',
+        inputSchema: none,
+        run: () => g.status(),
+      },
+      {
+        name: 'self.game.start',
+        description: '开始一局吗喽声控跑酷。用户说「开始游戏」「开一局」「再来一局」时调用。首次会开麦并安静校准约 2 秒',
+        inputSchema: none,
+        run: () => g.start(),
+      },
+      {
+        name: 'self.game.back_to_menu',
+        description: '从结算界面回到游戏主页',
+        inputSchema: none,
+        run: () => g.backToMenu(),
+      },
+      {
+        name: 'self.game.set_sensitivity',
+        description: '设置喊声触发跳跃的灵敏度，越大越容易起跳；现场太吵、观众欢呼误触发时调低，喊了跳不起来时调高。调整前可先查询当前值',
+        inputSchema: {
+          type: 'object',
+          properties: { value: { type: 'number', minimum: 0.6, maximum: 1.8, description: '灵敏度，范围 0.6~1.8，默认 1.0' } },
+          required: ['value'],
+        },
+        run: (a) => g.setSensitivity(a.value),
+      },
+      {
+        name: 'self.game.set_sound',
+        description: '打开或关闭游戏音效',
+        inputSchema: {
+          type: 'object',
+          properties: { on: { type: 'boolean', description: 'true 打开，false 关闭' } },
+          required: ['on'],
+        },
+        run: (a) => g.setSound(!!a.on),
+      },
+      {
+        name: 'self.game.save_score',
+        description: '在结算界面把本局成绩登记到排行榜',
+        inputSchema: {
+          type: 'object',
+          properties: { name: { type: 'string', description: '玩家花名或工号，最多 8 个字；不提供则用默认花名' } },
+          required: [],
+        },
+        run: (a) => g.saveScore(a.name),
+      },
+    ];
+  }
+
+  onMcp(p) {
+    const reply = (body) => this.send({ session_id: this.sessionId, type: 'mcp', payload: { jsonrpc: '2.0', id: p.id, ...body } });
+    if (p.id === undefined || p.id === null) return; // notification，不需要回复
+
+    if (p.method === 'initialize') {
+      reply({
+        result: {
+          protocolVersion: (p.params && p.params.protocolVersion) || '2024-11-05',
+          capabilities: { tools: {} },
+          serverInfo: { name: '吗喽声控跑酷', version: '1.0.0' },
+        },
+      });
+    } else if (p.method === 'tools/list') {
+      reply({ result: { tools: this.tools.map(({ name, description, inputSchema }) => ({ name, description, type: 0, inputSchema })), nextCursor: null } });
+    } else if (p.method === 'tools/call') {
+      const { name, arguments: args } = p.params || {};
+      const tool = this.tools.find((t) => t.name === name);
+      if (!tool) { reply({ error: { code: -32601, message: '未知工具: ' + name } }); return; }
+      try {
+        const out = tool.run(args || {});
+        const text = typeof out === 'string' ? out : JSON.stringify(out);
+        reply({ result: { content: [{ type: 'text', text }], isError: false } });
+      } catch (e) {
+        reply({ result: { content: [{ type: 'text', text: '执行失败：' + (e && e.message || e) }], isError: true } });
+      }
+    } else {
+      reply({ error: { code: -32601, message: '不支持的方法: ' + p.method } });
+    }
+  }
+}
+
+function linxEsc(s) {
+  return String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+window.linx = new LinxClient(window.Game);
+document.getElementById('btn-linx').addEventListener('click', () => window.linx.toggle());
 
 </script>
 </body>
