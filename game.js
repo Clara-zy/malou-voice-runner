@@ -291,7 +291,20 @@ function showOver() {
   $('lb-over').innerHTML = lbHTML(loadLB(), lastEntryTs);
   $('screen-over').classList.remove('hidden');
   if (!DEMO) $('name-input').focus();
+  if (!DEMO && window.linx) window.linx.speakResult(overSpeech());
   if (DEMO) setTimeout(() => { if (mode === 'over') resetRun(); }, 4000);
+}
+
+// 读给灵矽的口播稿：和结算页同一套文案，只把不好念的词换成说法
+function overSpeech() {
+  const title = $('over-title').textContent;
+  const score = $('over-score').textContent;
+  const msg = $('over-msg').textContent
+    .replace(/NullPointerException/g, '空指针异常')
+    .replace(/404/g, '四零四')
+    .replace(/P0/g, 'P零');
+  const tip = $('over-tip').textContent;
+  return [title, score, msg, tip].filter(Boolean).join('。');
 }
 
 function doSave() {
