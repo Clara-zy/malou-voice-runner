@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>吗喽声控跑酷 · 别让吗喽掉进 Bug</title>
 <!-- 改了 js/css 记得把 ?v= 加一，避免浏览器混用新旧缓存 -->
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <div id="stage">
@@ -765,12 +765,15 @@ function step(dt) {
     armTotal = 0;
   }
 
-  const vol = Math.max(micVol, synthVol, pendingVol);
+  // 起跳只认抓峰产出与合成喊声：micVol 直接进 handleJump 会在穿越阈值那帧以≈最小力抢跳，
+  // 随后 jumpCd 吞掉峰值，麦克风永远只能跳固定的最低高度
+  const jumpVol = Math.max(synthVol, pendingVol);
+  const vol = Math.max(micVol, jumpVol);
   lastVol = vol;
   // 蓄力时音量条同步上升（还没到喊出来的程度）
   const holdT = spaceHeld ? spaceHoldT : touchHeld ? touchHoldT : 0;
   if (holdT > 0) lastVol = Math.max(lastVol, voice.Tjump * 1.6 * Math.min(1, holdT / CHARGE_FULL_T));
-  handleJump(vol, dt);
+  handleJump(jumpVol, dt);
   pendingVol = 0; // 抓峰产出只作用于这一帧
 
   // ===== 发疯值：喊=充电，安静=衰减，纸飞机靠近=冻结（闭嘴区规则） =====

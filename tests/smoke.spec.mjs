@@ -136,17 +136,25 @@ async function main() {
   });
   check('触摸长按满力跳', touchAir >= 235 && touchAir <= 275, `${touchAir}px`);
 
-  // ---- 4b. 麦克风抓峰：快喊立即满力、渐强喊声最终也能到满力（力度=峰值而非穿越帧） ----
+  // ---- 4b. 麦克风抓峰：快喊、渐强喊声的「首跳」都按峰值出力（力度=峰值而非穿越帧） ----
+  // 只量第一跳：量整段最大值会被持续喊声的第二下弹跳掩盖「首跳被锁最小力」的问题
   const micJump = async (rampMs) => page.evaluate(async (ms) => {
     window.__clearTrack();
+    shoutT = 0; jumpBuf = 0; // 清掉上个用例残留的喊声包络/缓冲跳，并等落地，否则会把上一跳的落地当成首跳结束
+    while (!player.grounded) await new Promise((r) => setTimeout(r, 30));
     voice.active = true;
     voice.shoutPeak = 0.5;           // 模拟已校准：Tjump=0.225，满力线=0.45
     voice.simLevel = 0.05;
     window.__maxAir = 0;
     window.__rec = true;
+    let jumped = false;
     const tick = () => {
-      window.__maxAir = Math.max(window.__maxAir, GROUND - player.y);
-      if (window.__rec) requestAnimationFrame(tick);
+      if (!player.grounded) jumped = true;
+      else if (jumped) window.__rec = false;
+      if (window.__rec) {
+        window.__maxAir = Math.max(window.__maxAir, GROUND - player.y);
+        requestAnimationFrame(tick);
+      }
     };
     requestAnimationFrame(tick);
     if (ms === 0) {
@@ -165,9 +173,9 @@ async function main() {
     return Math.round(window.__maxAir);
   }, rampMs);
   const fast = await micJump(0);     // 阶跃快喊：帧内冲顶
-  const slow = await micJump(500);   // 500ms 渐强：首跳中力度，持续喊弹跳到满力
+  const ramp = await micJump(120);   // 120ms 渐强：真人起音 + 平滑后的典型形态
   check('麦克风快喊抓峰满力跳', fast >= 230 && fast <= 280, `${fast}px`);
-  check('麦克风渐强喊声最终满力（弹跳）', slow >= 230 && slow <= 280, `${slow}px`);
+  check('麦克风渐强喊声首跳满力', ramp >= 230 && ramp <= 280, `${ramp}px`);
 
   // ---- 4c. 空中提前喊 → 落地缓冲跳继承喊声力度（不再固定最小力） ----
   await page.reload();
