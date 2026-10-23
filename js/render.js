@@ -179,6 +179,22 @@ function drawPlayer() {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(face, sx, player.y - 8);
+
+  // 蓄力进度弧：空格/手指按住时显示，满圈=满嗓门
+  const holdT = spaceHeld ? spaceHoldT : touchHeld ? touchHoldT : 0;
+  if (holdT > 0 && !deadInfo && !winInfo) {
+    const cy = player.y - PLAYER_H - 24;
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(255,255,255,.25)';
+    ctx.beginPath();
+    ctx.arc(sx, cy, 15, 0, Math.PI * 2);
+    ctx.stroke();
+    const frac = Math.min(1, holdT / CHARGE_FULL_T);
+    ctx.strokeStyle = frac >= 1 ? '#ff6b6b' : '#ffd34d';
+    ctx.beginPath();
+    ctx.arc(sx, cy, 15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+    ctx.stroke();
+  }
 }
 
 function hudPill(x, y, text, size, color) {

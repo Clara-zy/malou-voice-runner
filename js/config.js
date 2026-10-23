@@ -15,5 +15,9 @@ const DEMO = qs.has('demo');
 const _goal = parseInt(qs.get('goal'), 10);
 const GOAL_DIST = Number.isFinite(_goal) && _goal >= 2000 ? _goal : 12000;
 
+/* 蓄力参数（空格 / 触摸长按共用）：按满 0.38s 等效一次满嗓门喊声 */
+const CHARGE_FULL_T = 0.38;
+function chargeVol(t) { return voice.Tjump + 0.28 * clamp(t / CHARGE_FULL_T, 0, 1); }
+
 /* 排行榜存储键 */
 const LB_KEY = 'malou.leaderboard', NAME_KEY = 'malou.name';

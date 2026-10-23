@@ -7,13 +7,18 @@
 class VoiceInput {
   constructor() {
     this.active = false;
-    this.level = 0;      // 平滑后的音量 0..~0.6
-    this.floor = 0.004;  // 环境噪音底（校准得到）
-    this.sens = 1.0;     // 灵敏度：>1 更容易触发
+    this.level = 0;        // 平滑后的音量 0..~0.6
+    this.floor = 0.004;    // 环境噪音底（校准得到）
+    this.shoutPeak = 0;    // 玩家最大喊声（试喊校准得到；0 = 未校准）
+    this.sens = 1.0;       // 灵敏度：>1 更容易触发
   }
 
   // 「跳」的音量门槛：得真喊；喊得越响跳得越高（力度按超出量计算）
-  get Tjump() { return Math.max(0.17, this.floor * 10) / this.sens; }
+  // 试喊校准过就按玩家自己的嗓门取 45% 分位，否则用保守默认值
+  get Tjump() {
+    const base = this.shoutPeak > 0 ? clamp(this.shoutPeak * 0.45, 0.09, 0.6) : 0.17;
+    return Math.max(base, this.floor * 3) / this.sens;
+  }
 
   async start() {
     this.stream = await navigator.mediaDevices.getUserMedia({
@@ -50,6 +55,21 @@ class VoiceInput {
           this.floor = Math.max(0.002, samples[Math.floor(samples.length * 0.7)] || 0.004);
           resolve(this.floor);
         }
+      };
+      tick();
+    });
+  }
+
+  // 试喊校准：记录窗口内平滑音量的峰值，作为这个玩家的"满嗓门"基线
+  calibrateShout(ms = 1500) {
+    return new Promise((resolve) => {
+      let peak = 0;
+      const t0 = performance.now();
+      const tick = () => {
+        this.update();
+        if (this.level > peak) peak = this.level;
+        if (performance.now() - t0 < ms) requestAnimationFrame(tick);
+        else { this.shoutPeak = peak; resolve(peak); }
       };
       tick();
     });

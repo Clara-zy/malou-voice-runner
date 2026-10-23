@@ -107,10 +107,19 @@ $('btn-mic').addEventListener('click', async () => {
   $('meter-box').classList.remove('hidden');
   $('calib-tip').classList.remove('hidden');
   mode = 'calib';
+  $('calib-tip').textContent = '🤫 请保持安静，正在测量环境噪音…';
   await voice.calibrate(1600);
-  $('calib-tip').textContent = '✅ 校准完成！试着一嗓子——冲进红区就会起跳，马上开始…';
+  // 试喊校准：按玩家自己的嗓门定起跳线，比全局阈值可靠得多
+  $('calib-tip').textContent = '👉 现在用你最大的声音——喊一嗓子！（测量你的嗓门基线）';
+  const peak = await voice.calibrateShout(1500);
+  if (peak > 0 && peak > voice.floor * 3) {
+    $('calib-tip').textContent = `✅ 起跳线已按你的嗓门校准！试着冲进红区就会起跳，马上开始…`;
+  } else {
+    voice.shoutPeak = 0; // 没测到有效喊声，退回默认阈值
+    $('calib-tip').textContent = '🤔 没太听到你喊？先用默认灵敏度开局，手感不对按 Esc 回来重校准';
+  }
   mode = 'ready';
-  await sleep(3000);
+  await sleep(2600);
   resetRun();
 });
 

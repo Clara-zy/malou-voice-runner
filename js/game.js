@@ -11,6 +11,7 @@ let obstacles = [], spawnX = 1000;
 let countdown = 0, goFlash = 0;
 let deadInfo = null, winInfo = false, shake = 0;
 let jumpCd = 0, jumpBuf = 0, keyJump = false, spaceHeld = false, spaceHoldT = 0, spaceReleaseVol = 0;
+let touchHeld = false, touchHoldT = 0, touchReleaseVol = 0, touchId = null;
 let pendingScore = 0, saved = false;
 
 const curScore = () => Math.min(1000, Math.floor(dist / 12));
@@ -54,15 +55,38 @@ addEventListener('keyup', (e) => {
   const k = e.key;
   if (k === ' ' && spaceHeld) {
     spaceHeld = false;
-    spaceReleaseVol = Math.min(0.45, spaceHoldT * 1.2); // 松开瞬间：把蓄的力当成一次喊声
+    spaceReleaseVol = chargeVol(spaceHoldT); // 松开瞬间：把蓄的力当成一次喊声
     spaceHoldT = 0;
   }
 });
 
+/* 触摸/鼠标：按住画布蓄力，松开起跳（与空格同一套蓄力模型，手机可玩） */
+const stageEl = $('stage');
+stageEl.addEventListener('pointerdown', (e) => {
+  if (mode !== 'play' || deadInfo || winInfo) return;
+  if (e.target.closest && e.target.closest('.overlay')) return; // 面板按钮不触发蓄力
+  e.preventDefault();
+  if (touchId !== null) return; // 只认第一根手指
+  touchId = e.pointerId;
+  touchHeld = true;
+});
+function endTouch(e) {
+  if (e.pointerId !== touchId) return;
+  touchId = null;
+  if (touchHeld) {
+    touchHeld = false;
+    touchReleaseVol = chargeVol(touchHoldT);
+    touchHoldT = 0;
+  }
+}
+addEventListener('pointerup', endTouch);
+addEventListener('pointercancel', endTouch);
+stageEl.addEventListener('contextmenu', (e) => e.preventDefault()); // 长按别弹菜单
+
 function currentVol(dt) {
   if (DEMO) return demoVol(dt);
   let v = voice.active ? voice.update() : 0;
-  if (spaceReleaseVol > 0) v = Math.max(v, spaceReleaseVol); // 松开空格的那一帧喊声
+  v = Math.max(v, spaceReleaseVol, touchReleaseVol); // 松开空格/手指那一帧的喊声脉冲
   return v;
 }
 
@@ -97,6 +121,7 @@ function resetRun() {
   countdown = 2.4; goFlash = 0;
   deadInfo = null; winInfo = false; shake = 0;
   jumpCd = 0; jumpBuf = 0; demoPulse = 0; spaceHoldT = 0; spaceReleaseVol = 0;
+  touchHeld = false; touchHoldT = 0; touchReleaseVol = 0; touchId = null;
   pendingScore = 0; saved = false;
   mode = 'play';
   $('screen-over').classList.add('hidden');
@@ -181,11 +206,14 @@ function step(dt) {
   }
 
   spaceHoldT = spaceHeld ? spaceHoldT + dt : 0;
+  touchHoldT = touchHeld ? touchHoldT + dt : 0;
   const vol = currentVol(dt);
   lastVol = vol;
-  if (spaceHeld) lastVol = Math.max(lastVol, Math.min(0.45, spaceHoldT * 1.2)); // 蓄力时音量条同步上升
+  // 蓄力时音量条同步上升（还没到喊出来的程度）
+  const holdT = spaceHeld ? spaceHoldT : touchHeld ? touchHoldT : 0;
+  if (holdT > 0) lastVol = Math.max(lastVol, voice.Tjump * 1.6 * Math.min(1, holdT / CHARGE_FULL_T));
   handleJump(vol, dt);
-  spaceReleaseVol = 0; // 喊声是瞬时脉冲，只作用于这一帧
+  spaceReleaseVol = 0; touchReleaseVol = 0; // 喊声是瞬时脉冲，只作用于这一帧
 
   // 吗喽自动匀速上班，音量只影响跳跃
   speed = AUTO_V;
