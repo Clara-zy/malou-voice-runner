@@ -74,8 +74,7 @@ body {
   .meme-card { animation: none; transition: none; }
 }
 
-h1 { font-size: 44px; letter-spacing: 2px; }
-.subtitle { color: #9fb0e8; margin: 4px 0 14px; font-size: 19px; letter-spacing: 6px; }
+h1 { font-size: 44px; letter-spacing: 2px; margin-bottom: 16px; }
 .rules { text-align: left; display: inline-block; margin-bottom: 16px; font-size: 19px; line-height: 1.85; color: #dfe6ff; }
 .rules b { color: #ffd34d; }
 
@@ -118,12 +117,32 @@ button.mid:disabled { background: #58c16b; color: #06240e; }
 .mk { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fff; }
 .meter-legend { display: flex; justify-content: space-between; width: 430px; margin: 5px auto 0; font-size: 14px; color: #9fb0e8; }
 
-#sens-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 2px; color: #9fb0e8; font-size: 15px; }
-#sens { width: 180px; accent-color: #ffd34d; }
-
-#linx-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 12px 0 2px; }
-#btn-linx { font-size: 15px; padding: 8px 16px; flex: none; }
-#linx-status { color: #9fb0e8; font-size: 14px; line-height: 1.5; text-align: left; max-width: 440px; user-select: text; -webkit-user-select: text; }
+#btn-settings {
+  position: absolute; top: 18px; right: 18px; z-index: 12;
+  width: 48px; height: 48px; border-radius: 50%; font-size: 24px; line-height: 1;
+  background: rgba(9, 14, 30, .85); border: 1px solid rgba(130, 165, 255, .3);
+  transition: transform .3s;
+}
+#btn-settings:hover { transform: rotate(45deg); background: rgba(30, 40, 80, .9); }
+/* 灵矽需要处理（激活码 / 连接失败）时亮红点提醒 */
+#btn-settings.alert::after {
+  content: ''; position: absolute; top: 4px; right: 4px; width: 11px; height: 11px;
+  border-radius: 50%; background: #ff5a5f; box-shadow: 0 0 0 2px #0b1020;
+}
+#settings-panel {
+  position: absolute; top: 76px; right: 18px; z-index: 12; width: 420px;
+  padding: 18px 20px 16px; border-radius: 16px; text-align: left; color: #eef2ff;
+  background: rgba(9, 14, 30, .96); border: 1px solid rgba(130, 165, 255, .28);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .6);
+}
+.set-title { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+.set-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 15px; color: #cdd8ff; }
+.set-label { width: 96px; flex: none; }
+.set-hint { font-size: 13px; color: #7c8cc0; margin: 4px 0 6px 106px; }
+#sens { flex: 1; accent-color: #ffd34d; }
+#sens-val { width: 28px; text-align: right; color: #ffd34d; }
+#btn-linx { font-size: 15px; padding: 7px 14px; flex: none; }
+#linx-status { color: #9fb0e8; font-size: 14px; line-height: 1.6; margin-top: 10px; user-select: text; -webkit-user-select: text; }
 #linx-status:empty { display: none; }
 #linx-status b { color: #ffd34d; font-size: 20px; letter-spacing: 2px; }
 #linx-status a { color: #8fb4ff; }
@@ -142,8 +161,6 @@ button.mid:disabled { background: #58c16b; color: #06240e; }
 .lb li.me { background: rgba(255, 211, 77, .16); }
 .lb .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb .sc { color: #ffd34d; font-weight: 700; }
-.lb-empty { color: #8fa0d8; font-size: 15px; margin: 10px 0; }
-
 .emoji-big { font-size: 72px; line-height: 1.25; }
 h2 { font-size: 38px; margin: 2px 0 10px; }
 .over-msg { font-size: 19px; color: #dfe6ff; margin-bottom: 4px; }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 吗喽声控跑酷 · 一键启动
+# 别让吗喽掉进 Bug · 一键启动
 # 用法：bash start.sh [端口]   （默认 8080，浏览器会自动打开）
 set -e
 cd "$(dirname "$0")"
@@ -11,7 +11,7 @@ trap "kill $SERVER_PID 2>/dev/null" EXIT
 sleep 1
 
 URL="http://localhost:$PORT"
-echo "🐵 吗喽声控跑酷已启动: $URL"
+echo "🐵 别让吗喽掉进 Bug 已启动: $URL"
 echo "（getUserMedia 要求 localhost 或 HTTPS，本机打开即可；Ctrl+C 退出）"
 open "$URL" 2>/dev/null || xdg-open "$URL" 2>/dev/null || true
 
