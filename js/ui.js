@@ -39,7 +39,12 @@ function lbRefreshStart() {
 function showOver() {
   if (mode !== 'play') return;
   mode = 'over';
+  Music.stop();
   pendingScore = curScore();
+  const stats = [];
+  if (maxCombo >= 2) stats.push(`最高连躲 x${maxCombo}`);
+  if (madCount > 0) stats.push(`发疯 ${madCount} 次`);
+  const statsStr = stats.length ? `（${stats.join(' · ')}）` : '';
   if (winInfo) {
     $('over-emoji').textContent = '🎉';
     $('over-title').textContent = '上线成功！';
@@ -52,7 +57,7 @@ function showOver() {
     $('over-msg').textContent = ms;
     $('over-tip').textContent = tp;
   }
-  $('over-score').textContent = `本次成绩：${pendingScore} 行代码`;
+  $('over-score').textContent = `本次成绩：${pendingScore} 行代码${statsStr}`;
   try { $('name-input').value = localStorage.getItem(NAME_KEY) || ('吗喽' + (10 + Math.floor(Math.random() * 90))); } catch (e) {}
   saved = false;
   $('btn-save').disabled = false;

@@ -16,12 +16,16 @@ function draw() {
   drawBuildings();
   drawGround();
   drawObstacles();
+  drawPickups();
   drawGoal();
   drawPlayer();
+  drawParticles();
 
   ctx.restore();
 
+  if (berserkT > 0) drawBerserkVignette();
   if (mode === 'play') drawHUD();
+  if (mode === 'play' && madFlash > 0) drawMadFlash();
   if (mode === 'play' && countdown > 0) drawCountdown();
   if (mode === 'play' && goFlash > 0) drawGo();
 }
@@ -130,6 +134,66 @@ function drawObstacles() {
   }
 }
 
+function drawPickups() {
+  for (const p of pickups) {
+    if (p.taken) continue;
+    const sx = p.x - camX;
+    if (sx > W + 80 || sx < -80) continue;
+    const y = p.y + Math.sin(tNow * 3 + p.x * 0.02) * 6;
+    // 光晕
+    const g = ctx.createRadialGradient(sx, y, 4, sx, y, 30);
+    g.addColorStop(0, p.type === 'boba' ? 'rgba(255,170,220,.35)' : 'rgba(255,211,77,.35)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(sx, y, 30, 0, 7);
+    ctx.fill();
+    ctx.font = '34px ' + EMOJI_FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(p.type === 'boba' ? '🧋' : '☕', sx, y);
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x - camX, p.y, p.size, 0, 7);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  for (const f of floaties) {
+    ctx.globalAlpha = clamp(f.life / f.max, 0, 1);
+    ctx.font = `800 ${f.size}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = f.color;
+    ctx.strokeStyle = 'rgba(5,8,18,.7)';
+    ctx.lineWidth = 4;
+    ctx.strokeText(f.str, f.x - camX, f.y);
+    ctx.fillText(f.str, f.x - camX, f.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawBerserkVignette() {
+  const a = 0.10 + 0.05 * Math.sin(tNow * 10);
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.85);
+  g.addColorStop(0, 'rgba(255,40,40,0)');
+  g.addColorStop(1, `rgba(255,40,40,${a})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawMadFlash() {
+  const a = clamp(madFlash / 1.2, 0, 1);
+  ctx.globalAlpha = a;
+  bigCenter('😤 发疯写码!!', '#ff6b6b');
+  ctx.globalAlpha = 1;
+}
+
 function drawGoal() {
   const sx = GOAL_DIST - camX;
   if (sx < -100 || sx > W + 200) return;
@@ -173,8 +237,17 @@ function drawPlayer() {
     }
   }
 
+  if (berserkT > 0 && !deadInfo) {
+    // 发疯光环
+    const a = 0.25 + 0.12 * Math.sin(tNow * 12);
+    ctx.fillStyle = `rgba(255,140,40,${a})`;
+    ctx.beginPath();
+    ctx.arc(sx, player.y - 38, 52 + Math.sin(tNow * 12) * 4, 0, 7);
+    ctx.fill();
+  }
+
   const shouting = lastVol > voice.Tjump;
-  const face = deadInfo ? '💀' : winInfo ? '🥳' : shouting ? '😡' : '🐵';
+  const face = deadInfo ? '💀' : winInfo ? '🥳' : berserkT > 0 ? '🤬' : shouting ? '😡' : '🐵';
   ctx.font = '62px ' + EMOJI_FONT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
@@ -237,6 +310,7 @@ function drawVolMeter(x, y, w, h) {
 
 function drawHUD() {
   hudPill(24, 20, `📋 ${curScore()} 行代码`, 22, '#ffd34d');
+  if (combo >= 2) hudPill(24, 74, `🔥 连躲 x${combo}`, 18, '#ff9a3d');
 
   const px = 330, pw = 440, py = 32, ph = 16;
   ctx.fillStyle = 'rgba(10,16,34,.75)';
@@ -261,13 +335,50 @@ function drawHUD() {
   ctx.fillText(`上线进度 ${Math.floor(pr * 100)}%`, px + pw / 2, py + ph + 20);
 
   drawVolMeter(W - 324, 20, 300, 26);
+  drawMadMeter(W - 324, 66, 300, 14);
 
   ctx.font = '500 14px system-ui';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = 'rgba(220,230,255,.55)';
-  const hint = DEMO ? '演示模式：吗喽自动玩' : '😱 大喊起跳（越响越高） · 空格按住蓄力/松开起跳';
+  const hint = DEMO ? '演示模式：吗喽自动玩' : '😱 大喊起跳（越响越高） · 空格/长按屏幕蓄力';
   ctx.fillText(hint + ' · F 全屏 · M 音效' + (muted ? ' 🔇' : ''), W - 24, H - 22);
+}
+
+/* 发疯值条：喊=充电；纸飞机靠近显示"闭嘴区"冻结；满了进入发疯写码 */
+function drawMadMeter(x, y, w, h) {
+  ctx.fillStyle = 'rgba(10,16,34,.75)';
+  rr(x - 8, y - 4, w + 16, h + 24, 10);
+  ctx.fill();
+  if (berserkT > 0) {
+    // 发疯中：整条闪烁红
+    const a = 0.55 + 0.35 * Math.sin(tNow * 12);
+    ctx.fillStyle = `rgba(255,80,80,${a})`;
+    rr(x, y, w * clamp(berserkT / MAD.BERSERK_T, 0, 1), h, 6);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,.08)';
+    rr(x, y, w, h, 6);
+    ctx.fill();
+    if (madness > 0) {
+      const g = ctx.createLinearGradient(x, 0, x + w, 0);
+      g.addColorStop(0, '#a06bff');
+      g.addColorStop(1, '#ff5c5c');
+      ctx.fillStyle = g;
+      rr(x, y, w * madness / 100, h, 6);
+      ctx.fill();
+    }
+  }
+  ctx.font = '600 13px system-ui';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = 'rgba(220,230,255,.7)';
+  ctx.fillText(berserkT > 0 ? '😤 发疯写码中!!' : '😤 发疯值（持续大喊充电）', x, y + h + 14);
+  if (madFrozen && berserkT <= 0) {
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffd34d';
+    ctx.fillText('🤐 闭嘴区（需求变更接近）', x + w, y + h + 14);
+  }
 }
 
 function bigCenter(text, color) {
