@@ -331,6 +331,7 @@ class LinxClient {
     if (this.listening) this.endUtterance();
     clearTimeout(this.quietTimer);
     this.stopPlayback();
+    this.suppressTts = false;
     this.speaking = true; // 先堵住上行，避免现场叫声被当成新的一句话
     this.abortSent = false;
     this.awaitingResultTts = true;
@@ -365,6 +366,25 @@ class LinxClient {
     if (this.speak(text, true)) this.voiceNote('正在朗读…');
   }
 
+  // 离开结算页时立刻停掉正在念的结果，并丢掉还在路上的语音
+  stopSpeaking() {
+    clearTimeout(this.quietTimer);
+    clearTimeout(this.speakTimer);
+    const pending = this.speaking || this.awaitingResultTts;
+    this.awaitingResultTts = false;
+    this.speaking = false;
+    this.suppressTts = true;
+    this.opusQueue = [];
+    if (pending && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.send({ session_id: this.sessionId, type: 'abort', reason: 'back_to_menu' });
+      this.abortSent = true;
+    }
+    this.stopPlayback();
+    this.voiceNote('');
+    const sub = document.getElementById('linx-sub');
+    if (sub) sub.classList.add('hidden');
+  }
+
   // 只有主页 / 结算界面才收音和说话（收音由 onFrame 判断）；开麦校准、对局期间打断 TTS，
   // 否则 AI 的声音会被校准当成环境噪音、对局中也会被当成喊声触发起跳
   tick() {
@@ -387,6 +407,12 @@ class LinxClient {
         if (msg.text) this.emoji = msg.text;
         break;
       case 'tts':
+        if (this.suppressTts) {
+          if (msg.state === 'start' && this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.send({ session_id: this.sessionId, type: 'abort', reason: 'back_to_menu' });
+          }
+          break;
+        }
         if (msg.state === 'start') {
           this.speaking = true;
           this.abortSent = false;
@@ -446,7 +472,7 @@ class LinxClient {
   }
 
   onAudio(buf) {
-    if (!this.down || !this.ac || !this.idle) return;
+    if (!this.down || !this.ac || !this.idle || this.suppressTts) return;
     if (this.ac.state === 'suspended') this.ac.resume();
     if (this.down.format === 'pcm') {
       const pcm = new Int16Array(buf);
