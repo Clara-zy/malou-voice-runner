@@ -109,9 +109,10 @@ button.mid:disabled { background: #58c16b; color: #06240e; }
   position: relative; width: 430px; height: 30px; margin: 0 auto;
   border-radius: 9px; overflow: hidden;
   border: 1px solid rgba(140, 165, 255, .35);
+  /* 红区起点由 JS 按动态起跳线写入 --jump-mark（与 #mark-jump 刻度同源） */
   background: linear-gradient(90deg,
-    rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, .08) 59%,
-    rgba(229, 72, 77, .45) 59%, rgba(229, 72, 77, .45) 100%);
+    rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, .08) var(--jump-mark, 59%),
+    rgba(229, 72, 77, .45) var(--jump-mark, 59%), rgba(229, 72, 77, .45) 100%);
 }
 #meter-fill { position: absolute; top: 0; left: 0; bottom: 0; width: 0; background: rgba(255, 255, 255, .5); }
 .mk { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fff; }

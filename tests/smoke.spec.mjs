@@ -112,7 +112,7 @@ async function main() {
   await injectClearTrack(page);
   const small = await maxAirOf(page, 180);
   const big = await maxAirOf(page, 500);
-  check('空格蓄力跳高随蓄力增长', small >= 120 && small <= 205 && big >= 200 && big <= 245 && big > small, `180ms=${small}px / 500ms=${big}px`);
+  check('空格蓄力跳高随蓄力增长', small >= 130 && small <= 195 && big >= 235 && big <= 275 && big > small, `180ms=${small}px / 500ms=${big}px`);
 
   // ---- 4. 触摸长按蓄力 = 满力跳（移动端入口） ----
   await page.reload();
@@ -134,7 +134,63 @@ async function main() {
     window.__rec = false;
     return Math.round(window.__maxAir);
   });
-  check('触摸长按满力跳', touchAir >= 195 && touchAir <= 245, `${touchAir}px`);
+  check('触摸长按满力跳', touchAir >= 235 && touchAir <= 275, `${touchAir}px`);
+
+  // ---- 4b. 麦克风抓峰：快喊立即满力、渐强喊声最终也能到满力（力度=峰值而非穿越帧） ----
+  const micJump = async (rampMs) => page.evaluate(async (ms) => {
+    window.__clearTrack();
+    voice.active = true;
+    voice.shoutPeak = 0.5;           // 模拟已校准：Tjump=0.225，满力线=0.45
+    voice.simLevel = 0.05;
+    window.__maxAir = 0;
+    window.__rec = true;
+    const tick = () => {
+      window.__maxAir = Math.max(window.__maxAir, GROUND - player.y);
+      if (window.__rec) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    if (ms === 0) {
+      await new Promise((r) => setTimeout(r, 100));
+      voice.simLevel = 0.48; // 阶跃式快喊：一步冲到顶
+    } else {
+      const steps = 12;
+      for (let i = 1; i <= steps; i++) {
+        await new Promise((r) => setTimeout(r, ms / steps));
+        voice.simLevel = 0.05 + (0.48 - 0.05) * (i / steps); // 从 0.05 爬到 0.48
+      }
+    }
+    await new Promise((r) => setTimeout(r, 1100)); // 抓峰→起跳（→弹跳）→落地
+    window.__rec = false;
+    voice.simLevel = null; voice.active = false; voice.shoutPeak = 0;
+    return Math.round(window.__maxAir);
+  }, rampMs);
+  const fast = await micJump(0);     // 阶跃快喊：帧内冲顶
+  const slow = await micJump(500);   // 500ms 渐强：首跳中力度，持续喊弹跳到满力
+  check('麦克风快喊抓峰满力跳', fast >= 230 && fast <= 280, `${fast}px`);
+  check('麦克风渐强喊声最终满力（弹跳）', slow >= 230 && slow <= 280, `${slow}px`);
+
+  // ---- 4c. 空中提前喊 → 落地缓冲跳继承喊声力度（不再固定最小力） ----
+  await page.reload();
+  await page.getByRole('button', { name: /空格调试模式/ }).click();
+  await poll(page, () => mode === 'play' && countdown <= 0, 6000, 100);
+  await injectClearTrack(page);
+  const bufJump = await page.evaluate(async () => {
+    window.__clearTrack();
+    window.__maxAir = 0;
+    window.__rec = true;
+    const tick = () => {
+      window.__maxAir = Math.max(window.__maxAir, GROUND - player.y);
+      if (window.__rec) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' })); // 满力起跳
+    await new Promise((r) => setTimeout(r, 640)); // 滞空 ~0.885s，此时仍在空中且接近落地
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' })); // 空中再喊（进缓冲）
+    await new Promise((r) => setTimeout(r, 1100));
+    window.__rec = false;
+    return Math.round(window.__maxAir);
+  });
+  check('落地缓冲跳继承满力（≈254px）', bufJump >= 235 && bufJump <= 280, `${bufJump}px`);
 
   // ---- 5. 道具收集计分（清空赛道做纯道具断言） ----
   await startKeyboardRun(page);

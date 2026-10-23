@@ -183,7 +183,9 @@ $('sens').addEventListener('input', (e) => {
 
 function updateMeterDOM() {
   if (!voice.active) return;
-  const maxV = voice.Tjump * 1.7;
+  const maxV = voice.fullVol * 1.2;
+  const markPct = clamp(voice.Tjump / maxV * 100, 0, 100);
+  $('meter').style.setProperty('--jump-mark', markPct + '%'); // 红区起点与刻度线同源，避免写死脱节
   $('meter-fill').style.width = clamp(voice.level / maxV * 100, 0, 100) + '%';
-  $('mark-jump').style.left = (100 / 1.7) + '%';
+  $('mark-jump').style.left = markPct + '%';
 }
