@@ -8,7 +8,7 @@
  * 协议文档：https://linx.qiniu.com/docs/xrobot/platform/websocket
  *           https://linx.qiniu.com/docs/xrobot/mcp/hardware-mcp
  */
-const LINX_INTRO = '欢迎来玩“吗喽声控跑酷”。吗喽自己跑，你负责喊，喊得越响跳得越高。纸飞机飞来时别出声。跑满一千行就上线成功。跟我说：开始游戏。';
+const LINX_INTRO = '欢迎来玩“别让吗喽掉进 Bug”。吗喽自己跑，你负责喊，喊得越响跳得越高。纸飞机飞来时别出声。跑满一千行就上线成功。跟我说：开始游戏。';
 const LINX_OTA = 'https://xrobo.qiniuapi.com/v1/ota/';
 const LINX_CONSOLE = 'https://xrobo.qiniu.com/';
 const LINX_RATE = 16000, LINX_FRAME = 320; // 上行 PCM16 单声道 20ms 一帧
@@ -86,10 +86,11 @@ class LinxClient {
   }
 
   /* ---------- UI ---------- */
-  setStatus(html, err) {
+  setStatus(html, err, alert = err) {
     const el = document.getElementById('linx-status');
     el.innerHTML = html;
     el.classList.toggle('err', !!err);
+    document.getElementById('btn-settings').classList.toggle('alert', !!alert);
   }
   setButton(text) { document.getElementById('btn-linx').textContent = text; }
   voiceNote(text) {
@@ -113,7 +114,8 @@ class LinxClient {
     this.setButton('🗣️ 连接中…（点击取消）');
     try {
       if (!this.ac) this.ac = new (window.AudioContext || window.webkitAudioContext)();
-      await this.ac.resume(); // 必须在点击手势里调用
+      // 页面加载时自动连接没有用户手势，resume 会一直挂起：不等它，首次点击/按键时再恢复（见 linxWake）
+      this.ac.resume().catch(() => {});
       const cfg = await this.activate(gen);
       if (gen !== this.gen) return;
       this.setStatus('正在连接灵矽…');
@@ -123,7 +125,8 @@ class LinxClient {
       if (gen !== this.gen) return;
       this.busy = false;
       this.setButton('🗣️ 断开灵矽');
-      this.speak(LINX_INTRO, false);
+      if (this.ac.state === 'running') this.speak(LINX_INTRO, false);
+      else this.introPending = true; // 音频还没解锁，开场白留到首次交互再念
       this.setStatus(`✅ 已连接：结算时会自动读出结果。也可以说「开始游戏」「灵敏度调低点」「帮我上榜，花名小王」<br>
         设备 ID <code>${linxIdentity().id}</code>（不是你的智能体在回答？到 <a href="${LINX_CONSOLE}" target="_blank" rel="noopener">智控台</a> → 设备管理 → 批量导入，填这个 MAC 后重连）`);
     } catch (e) {
@@ -158,7 +161,8 @@ class LinxClient {
       if (gen !== this.gen) return null;
       if (data.websocket && data.websocket.token) return data.websocket;
       if (!data.activation) throw new Error('OTA 没有返回连接信息');
-      this.setStatus(`激活码 <b>${data.activation.code}</b>：打开 <a href="${LINX_CONSOLE}" target="_blank" rel="noopener">灵矽智控台</a> → 选择智能体 → 添加设备，填入激活码，绑定后自动连接…`);
+      this.setStatus(`激活码 <b>${data.activation.code}</b>：打开 <a href="${LINX_CONSOLE}" target="_blank" rel="noopener">灵矽智控台</a> → 选择智能体 → 添加设备，填入激活码，绑定后自动连接…`, false, true);
+      if (this.game.mode === 'menu' && window.openSettings) openSettings(); // 激活码收在设置里，主动弹出来
       await this.waitBound(gen);
       if (gen !== this.gen) return null;
     }
@@ -288,6 +292,7 @@ class LinxClient {
   disconnect(reason, err) {
     this.gen++;
     this.busy = false;
+    this.introPending = false;
     this.ready = false;
     this.listening = false;
     this.speaking = false;
@@ -356,7 +361,7 @@ class LinxClient {
   speakResult(text) {
     if (!text) return;
     if (!this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      this.voiceNote('还没连上灵矽，所以没有朗读。回主页点「连接灵矽语音助手」。');
+      this.voiceNote('还没连上灵矽，所以没有朗读。回主页在右上角 ⚙️ 设置里连接灵矽。');
       return;
     }
     if (this.playError) {
@@ -528,13 +533,13 @@ class LinxClient {
     return [
       {
         name: 'self.game.get_status',
-        description: '获取吗喽声控跑酷的当前状态：screen 当前界面（menu 主页 / calib、ready 开麦校准中 / play 对局中 / over 结算）、本局成绩（行代码，满分 1000）、结局、灵敏度、音效开关、排行榜前五',
+        description: '获取「别让吗喽掉进 Bug」游戏的当前状态：screen 当前界面（menu 主页 / calib、ready 开麦校准中 / play 对局中 / over 结算）、本局成绩（行代码，满分 1000）、结局、灵敏度、音效开关、排行榜前五',
         inputSchema: none,
         run: () => g.status(),
       },
       {
         name: 'self.game.start',
-        description: '开始一局吗喽声控跑酷。用户说「开始游戏」「开一局」「再来一局」时调用。首次会开麦并安静校准约 2 秒',
+        description: '开始一局「别让吗喽掉进 Bug」。用户说「开始游戏」「开一局」「再来一局」时调用。首次会开麦并安静校准约 2 秒',
         inputSchema: none,
         run: () => g.start(),
       },
@@ -586,7 +591,7 @@ class LinxClient {
         result: {
           protocolVersion: (p.params && p.params.protocolVersion) || '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: '吗喽声控跑酷', version: '1.0.0' },
+          serverInfo: { name: '别让吗喽掉进 Bug', version: '1.0.0' },
         },
       });
     } else if (p.method === 'tools/list') {
@@ -614,3 +619,18 @@ function linxEsc(s) {
 
 window.linx = new LinxClient(window.Game);
 document.getElementById('btn-linx').addEventListener('click', () => window.linx.toggle());
+
+// 浏览器要等用户手势才放行音频：每次点击/按键都尝试恢复，第一次顺便补念开场白（只在主页/结算页念）
+function linxWake() {
+  const c = window.linx;
+  if (!c.ac) return;
+  const intro = c.introPending;
+  c.introPending = false;
+  c.ac.resume().then(() => { if (intro && c.idle) c.speak(LINX_INTRO, false); }).catch(() => {});
+}
+addEventListener('pointerdown', linxWake, true);
+addEventListener('keydown', linxWake, true);
+
+// 默认自动连接灵矽；?demo 演示与 ?nolinx（测试/离线排查）不连
+const linxQs = new URLSearchParams(location.search);
+if (!linxQs.has('demo') && !linxQs.has('nolinx')) window.linx.connect();

@@ -10,9 +10,9 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>吗喽声控跑酷 · 别让吗喽掉进 Bug</title>
+<title>别让吗喽掉进 Bug</title>
 <!-- 改了 js/css 记得把 ?v= 加一，避免浏览器混用新旧缓存 -->
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <div id="stage">
@@ -32,8 +32,7 @@
         </div>
       </aside>
       <div class="home-main">
-        <h1>🐵 吗喽声控跑酷</h1>
-        <p class="subtitle">—— 别让吗喽掉进 Bug ——</p>
+        <h1>🐵 别让吗喽掉进 Bug</h1>
         <div class="rules">
           <p>🚶 <b>吗喽自动匀速往前跑</b>，你只负责一件事：喊</p>
           <p>😱 <b>看到障碍就大喊</b>：喊得越响，跳得越高越远</p>
@@ -41,7 +40,6 @@
         </div>
         <div class="btn-row">
           <button id="btn-mic" class="big">🎤 开麦上班</button>
-          <button id="btn-keyboard" class="ghost">⌨️ 空格调试模式（不开麦）</button>
         </div>
         <div id="calib-tip" class="hidden">🤫 请保持安静，正在测量环境噪音…</div>
         <div id="mic-error" class="hidden"></div>
@@ -50,17 +48,25 @@
           <div id="meter"><div id="meter-fill"></div><div id="mark-jump" class="mk"></div></div>
           <div class="meter-legend"><span>🤫 安静</span><span>🦘 跳（越响越高）</span></div>
         </div>
-        <div id="sens-row">灵敏度
-          <input type="range" id="sens" min="0.6" max="1.8" step="0.1" value="1">
-          <span id="sens-val">1.0</span>
-        </div>
-        <div id="linx-row">
-          <button id="btn-linx" class="ghost">🗣️ 连接灵矽语音助手</button>
-          <span id="linx-status"></span>
-        </div>
         <div id="lb-start"></div>
-        <p class="hint">F 全屏（投大屏更佳） · M 音效开关 · 开发调试：按住空格蓄力，松开模拟大喊</p>
+        <p class="hint">F 全屏（投大屏更佳） · M 音效开关</p>
       </div>
+    </div>
+    <!-- 右上角设置：灵敏度 + 灵矽语音助手 -->
+    <button id="btn-settings" aria-label="设置" title="设置">⚙️</button>
+    <div id="settings-panel" class="hidden">
+      <div class="set-title">设置</div>
+      <div class="set-row">
+        <span class="set-label">喊声灵敏度</span>
+        <input type="range" id="sens" min="0.6" max="1.8" step="0.1" value="1">
+        <span id="sens-val">1.0</span>
+      </div>
+      <p class="set-hint">现场太吵、误触发时调低；喊了跳不起来时调高</p>
+      <div class="set-row">
+        <span class="set-label">灵矽语音助手</span>
+        <button id="btn-linx" class="ghost">🗣️ 连接灵矽语音助手</button>
+      </div>
+      <div id="linx-status"></div>
     </div>
   </div>
 
@@ -543,6 +549,7 @@ addEventListener('keydown', (e) => {
   if (k === 'Escape' || k === 'Esc') {
     if (mode === 'over') { $('name-input').blur(); toMenu(); }
     else if (mode === 'calib' || mode === 'ready') toMenu();
+    else if (mode === 'menu') closeSettings();
     return;
   }
   if (document.activeElement === $('name-input')) return; // 输花名时不响应任何游戏快捷键（含 F/M）
@@ -652,6 +659,7 @@ function toMenu() {
   Music.stop();
   if (window.linx) window.linx.stopSpeaking(); // 回主页时停掉结算口播
   resetMicUI(); // 复位开麦按钮/音量条，支持「Esc 回来 → 重新校准」
+  closeSettings();
   $('screen-over').classList.add('hidden');
   $('screen-start').classList.remove('hidden');
   lbRefreshStart();
@@ -1300,7 +1308,7 @@ function addScore(name, score) {
 }
 function lbHTML(list, meTs) {
   const top = list.slice(0, 5);
-  if (!top.length) return '<p class="lb-empty">还没有吗喽上榜，等你来当第一个 🐵</p>';
+  if (!top.length) return '';
   const medals = ['🥇', '🥈', '🥉'];
   return '<ol class="lb">' + top.map((e, i) =>
     `<li class="${e.ts === meTs ? 'me' : ''}"><span class="rk">${medals[i] || i + 1}</span><span class="nm">${esc(e.name)}</span><span class="sc">${e.score} 行</span></li>`
@@ -1412,7 +1420,7 @@ async function startMic() {
       const why = err && err.name === 'NotAllowedError'
         ? '麦克风权限被拒绝：请在地址栏允许麦克风后刷新页面'
         : (err && err.message) || '未知错误';
-      $('mic-error').textContent = '麦克风开启失败：' + why + '。可先用键盘模式试玩。';
+      $('mic-error').textContent = '麦克风开启失败：' + why + '。';
       $('mic-error').classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = '🎤 开麦上班';
@@ -1445,9 +1453,12 @@ async function startMic() {
 }
 $('btn-mic').addEventListener('click', startMic);
 
-$('btn-keyboard').addEventListener('click', () => {
-  SFX.ensure();
-  resetRun(); // 不开麦，直接用空格模拟喊声
+/* 右上角设置面板：点齿轮开关，点面板外收起 */
+function openSettings() { $('settings-panel').classList.remove('hidden'); }
+function closeSettings() { $('settings-panel').classList.add('hidden'); }
+$('btn-settings').addEventListener('click', () => $('settings-panel').classList.toggle('hidden'));
+addEventListener('pointerdown', (e) => {
+  if (!e.target.closest || !e.target.closest('#settings-panel, #btn-settings')) closeSettings();
 });
 
 $('sens').addEventListener('input', (e) => {
@@ -1785,7 +1796,7 @@ mu0q°ññ&É&ÉöW:ÙY0Y0ª/§¯²ª°¨±©±)zê-õhLÌE×ÉÆE�
  * 协议文档：https://linx.qiniu.com/docs/xrobot/platform/websocket
  *           https://linx.qiniu.com/docs/xrobot/mcp/hardware-mcp
  */
-const LINX_INTRO = '欢迎来玩“吗喽声控跑酷”。吗喽自己跑，你负责喊，喊得越响跳得越高。纸飞机飞来时别出声。跑满一千行就上线成功。跟我说：开始游戏。';
+const LINX_INTRO = '欢迎来玩“别让吗喽掉进 Bug”。吗喽自己跑，你负责喊，喊得越响跳得越高。纸飞机飞来时别出声。跑满一千行就上线成功。跟我说：开始游戏。';
 const LINX_OTA = 'https://xrobo.qiniuapi.com/v1/ota/';
 const LINX_CONSOLE = 'https://xrobo.qiniu.com/';
 const LINX_RATE = 16000, LINX_FRAME = 320; // 上行 PCM16 单声道 20ms 一帧
@@ -1863,10 +1874,11 @@ class LinxClient {
   }
 
   /* ---------- UI ---------- */
-  setStatus(html, err) {
+  setStatus(html, err, alert = err) {
     const el = document.getElementById('linx-status');
     el.innerHTML = html;
     el.classList.toggle('err', !!err);
+    document.getElementById('btn-settings').classList.toggle('alert', !!alert);
   }
   setButton(text) { document.getElementById('btn-linx').textContent = text; }
   voiceNote(text) {
@@ -1890,7 +1902,8 @@ class LinxClient {
     this.setButton('🗣️ 连接中…（点击取消）');
     try {
       if (!this.ac) this.ac = new (window.AudioContext || window.webkitAudioContext)();
-      await this.ac.resume(); // 必须在点击手势里调用
+      // 页面加载时自动连接没有用户手势，resume 会一直挂起：不等它，首次点击/按键时再恢复（见 linxWake）
+      this.ac.resume().catch(() => {});
       const cfg = await this.activate(gen);
       if (gen !== this.gen) return;
       this.setStatus('正在连接灵矽…');
@@ -1900,7 +1913,8 @@ class LinxClient {
       if (gen !== this.gen) return;
       this.busy = false;
       this.setButton('🗣️ 断开灵矽');
-      this.speak(LINX_INTRO, false);
+      if (this.ac.state === 'running') this.speak(LINX_INTRO, false);
+      else this.introPending = true; // 音频还没解锁，开场白留到首次交互再念
       this.setStatus(`✅ 已连接：结算时会自动读出结果。也可以说「开始游戏」「灵敏度调低点」「帮我上榜，花名小王」<br>
         设备 ID <code>${linxIdentity().id}</code>（不是你的智能体在回答？到 <a href="${LINX_CONSOLE}" target="_blank" rel="noopener">智控台</a> → 设备管理 → 批量导入，填这个 MAC 后重连）`);
     } catch (e) {
@@ -1935,7 +1949,8 @@ class LinxClient {
       if (gen !== this.gen) return null;
       if (data.websocket && data.websocket.token) return data.websocket;
       if (!data.activation) throw new Error('OTA 没有返回连接信息');
-      this.setStatus(`激活码 <b>${data.activation.code}</b>：打开 <a href="${LINX_CONSOLE}" target="_blank" rel="noopener">灵矽智控台</a> → 选择智能体 → 添加设备，填入激活码，绑定后自动连接…`);
+      this.setStatus(`激活码 <b>${data.activation.code}</b>：打开 <a href="${LINX_CONSOLE}" target="_blank" rel="noopener">灵矽智控台</a> → 选择智能体 → 添加设备，填入激活码，绑定后自动连接…`, false, true);
+      if (this.game.mode === 'menu' && window.openSettings) openSettings(); // 激活码收在设置里，主动弹出来
       await this.waitBound(gen);
       if (gen !== this.gen) return null;
     }
@@ -2065,6 +2080,7 @@ class LinxClient {
   disconnect(reason, err) {
     this.gen++;
     this.busy = false;
+    this.introPending = false;
     this.ready = false;
     this.listening = false;
     this.speaking = false;
@@ -2133,7 +2149,7 @@ class LinxClient {
   speakResult(text) {
     if (!text) return;
     if (!this.ready || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      this.voiceNote('还没连上灵矽，所以没有朗读。回主页点「连接灵矽语音助手」。');
+      this.voiceNote('还没连上灵矽，所以没有朗读。回主页在右上角 ⚙️ 设置里连接灵矽。');
       return;
     }
     if (this.playError) {
@@ -2305,13 +2321,13 @@ class LinxClient {
     return [
       {
         name: 'self.game.get_status',
-        description: '获取吗喽声控跑酷的当前状态：screen 当前界面（menu 主页 / calib、ready 开麦校准中 / play 对局中 / over 结算）、本局成绩（行代码，满分 1000）、结局、灵敏度、音效开关、排行榜前五',
+        description: '获取「别让吗喽掉进 Bug」游戏的当前状态：screen 当前界面（menu 主页 / calib、ready 开麦校准中 / play 对局中 / over 结算）、本局成绩（行代码，满分 1000）、结局、灵敏度、音效开关、排行榜前五',
         inputSchema: none,
         run: () => g.status(),
       },
       {
         name: 'self.game.start',
-        description: '开始一局吗喽声控跑酷。用户说「开始游戏」「开一局」「再来一局」时调用。首次会开麦并安静校准约 2 秒',
+        description: '开始一局「别让吗喽掉进 Bug」。用户说「开始游戏」「开一局」「再来一局」时调用。首次会开麦并安静校准约 2 秒',
         inputSchema: none,
         run: () => g.start(),
       },
@@ -2363,7 +2379,7 @@ class LinxClient {
         result: {
           protocolVersion: (p.params && p.params.protocolVersion) || '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: '吗喽声控跑酷', version: '1.0.0' },
+          serverInfo: { name: '别让吗喽掉进 Bug', version: '1.0.0' },
         },
       });
     } else if (p.method === 'tools/list') {
@@ -2391,6 +2407,21 @@ function linxEsc(s) {
 
 window.linx = new LinxClient(window.Game);
 document.getElementById('btn-linx').addEventListener('click', () => window.linx.toggle());
+
+// 浏览器要等用户手势才放行音频：每次点击/按键都尝试恢复，第一次顺便补念开场白（只在主页/结算页念）
+function linxWake() {
+  const c = window.linx;
+  if (!c.ac) return;
+  const intro = c.introPending;
+  c.introPending = false;
+  c.ac.resume().then(() => { if (intro && c.idle) c.speak(LINX_INTRO, false); }).catch(() => {});
+}
+addEventListener('pointerdown', linxWake, true);
+addEventListener('keydown', linxWake, true);
+
+// 默认自动连接灵矽；?demo 演示与 ?nolinx（测试/离线排查）不连
+const linxQs = new URLSearchParams(location.search);
+if (!linxQs.has('demo') && !linxQs.has('nolinx')) window.linx.connect();
 
 </script>
 </body>

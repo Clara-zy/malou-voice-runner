@@ -26,7 +26,7 @@ function addScore(name, score) {
 }
 function lbHTML(list, meTs) {
   const top = list.slice(0, 5);
-  if (!top.length) return '<p class="lb-empty">还没有吗喽上榜，等你来当第一个 🐵</p>';
+  if (!top.length) return '';
   const medals = ['🥇', '🥈', '🥉'];
   return '<ol class="lb">' + top.map((e, i) =>
     `<li class="${e.ts === meTs ? 'me' : ''}"><span class="rk">${medals[i] || i + 1}</span><span class="nm">${esc(e.name)}</span><span class="sc">${e.score} 行</span></li>`
@@ -138,7 +138,7 @@ async function startMic() {
       const why = err && err.name === 'NotAllowedError'
         ? '麦克风权限被拒绝：请在地址栏允许麦克风后刷新页面'
         : (err && err.message) || '未知错误';
-      $('mic-error').textContent = '麦克风开启失败：' + why + '。可先用键盘模式试玩。';
+      $('mic-error').textContent = '麦克风开启失败：' + why + '。';
       $('mic-error').classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = '🎤 开麦上班';
@@ -171,9 +171,12 @@ async function startMic() {
 }
 $('btn-mic').addEventListener('click', startMic);
 
-$('btn-keyboard').addEventListener('click', () => {
-  SFX.ensure();
-  resetRun(); // 不开麦，直接用空格模拟喊声
+/* 右上角设置面板：点齿轮开关，点面板外收起 */
+function openSettings() { $('settings-panel').classList.remove('hidden'); }
+function closeSettings() { $('settings-panel').classList.add('hidden'); }
+$('btn-settings').addEventListener('click', () => $('settings-panel').classList.toggle('hidden'));
+addEventListener('pointerdown', (e) => {
+  if (!e.target.closest || !e.target.closest('#settings-panel, #btn-settings')) closeSettings();
 });
 
 $('sens').addEventListener('input', (e) => {

@@ -10,9 +10,9 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>吗喽声控跑酷 · 别让吗喽掉进 Bug</title>
+<title>别让吗喽掉进 Bug</title>
 <!-- 改了 js/css 记得把 ?v= 加一，避免浏览器混用新旧缓存 -->
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <div id="stage">
@@ -32,8 +32,7 @@
         </div>
       </aside>
       <div class="home-main">
-        <h1>🐵 吗喽声控跑酷</h1>
-        <p class="subtitle">—— 别让吗喽掉进 Bug ——</p>
+        <h1>🐵 别让吗喽掉进 Bug</h1>
         <div class="rules">
           <p>🚶 <b>吗喽自动匀速往前跑</b>，你只负责一件事：喊</p>
           <p>😱 <b>看到障碍就大喊</b>：喊得越响，跳得越高越远</p>
@@ -41,7 +40,6 @@
         </div>
         <div class="btn-row">
           <button id="btn-mic" class="big">🎤 开麦上班</button>
-          <button id="btn-keyboard" class="ghost">⌨️ 空格调试模式（不开麦）</button>
         </div>
         <div id="calib-tip" class="hidden">🤫 请保持安静，正在测量环境噪音…</div>
         <div id="mic-error" class="hidden"></div>
@@ -50,17 +48,25 @@
           <div id="meter"><div id="meter-fill"></div><div id="mark-jump" class="mk"></div></div>
           <div class="meter-legend"><span>🤫 安静</span><span>🦘 跳（越响越高）</span></div>
         </div>
-        <div id="sens-row">灵敏度
-          <input type="range" id="sens" min="0.6" max="1.8" step="0.1" value="1">
-          <span id="sens-val">1.0</span>
-        </div>
-        <div id="linx-row">
-          <button id="btn-linx" class="ghost">🗣️ 连接灵矽语音助手</button>
-          <span id="linx-status"></span>
-        </div>
         <div id="lb-start"></div>
-        <p class="hint">F 全屏（投大屏更佳） · M 音效开关 · 开发调试：按住空格蓄力，松开模拟大喊</p>
+        <p class="hint">F 全屏（投大屏更佳） · M 音效开关</p>
       </div>
+    </div>
+    <!-- 右上角设置：灵敏度 + 灵矽语音助手 -->
+    <button id="btn-settings" aria-label="设置" title="设置">⚙️</button>
+    <div id="settings-panel" class="hidden">
+      <div class="set-title">设置</div>
+      <div class="set-row">
+        <span class="set-label">喊声灵敏度</span>
+        <input type="range" id="sens" min="0.6" max="1.8" step="0.1" value="1">
+        <span id="sens-val">1.0</span>
+      </div>
+      <p class="set-hint">现场太吵、误触发时调低；喊了跳不起来时调高</p>
+      <div class="set-row">
+        <span class="set-label">灵矽语音助手</span>
+        <button id="btn-linx" class="ghost">🗣️ 连接灵矽语音助手</button>
+      </div>
+      <div id="linx-status"></div>
     </div>
   </div>
 
@@ -86,17 +92,17 @@
   <!-- 灵矽语音助手字幕 -->
   <div id="linx-sub" class="hidden"></div>
 </div>
-<script src="js/util.js?v=7"></script>
-<script src="js/config.js?v=7"></script>
-<script src="js/voice.js?v=7"></script>
-<script src="js/sfx.js?v=7"></script>
-<script src="js/world.js?v=7"></script>
-<script src="js/game.js?v=7"></script>
-<script src="js/render.js?v=7"></script>
-<script src="js/ui.js?v=7"></script>
-<script src="js/bridge.js?v=7"></script>
-<script src="js/main.js?v=7"></script>
+<script src="js/util.js?v=8"></script>
+<script src="js/config.js?v=8"></script>
+<script src="js/voice.js?v=8"></script>
+<script src="js/sfx.js?v=8"></script>
+<script src="js/world.js?v=8"></script>
+<script src="js/game.js?v=8"></script>
+<script src="js/render.js?v=8"></script>
+<script src="js/ui.js?v=8"></script>
+<script src="js/bridge.js?v=8"></script>
+<script src="js/main.js?v=8"></script>
 <script src="opus-decoder.min.js?v=1"></script>
-<script src="linx.js?v=9"></script>
+<script src="linx.js?v=10"></script>
 </body>
 </html>

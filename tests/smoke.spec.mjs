@@ -45,9 +45,10 @@ async function poll(page, fn, timeoutMs = 15000, everyMs = 250) {
   return last;
 }
 
+// 不开麦直接开局（首页已无键盘模式入口），对局中空格/触摸蓄力仍可模拟喊声
 async function startKeyboardRun(page) {
-  await page.goto(BASE + '/');
-  await page.getByRole('button', { name: /空格调试模式/ }).click();
+  await page.goto(BASE + '/?nolinx');
+  await page.evaluate(() => { SFX.ensure(); resetRun(); });
   // poll 到倒计时真正结束再返回（固定 sleep 在慢机上只有 400ms 余量）
   await poll(page, () => mode === 'play' && countdown <= 0, 6000, 100);
 }
@@ -106,18 +107,14 @@ async function main() {
   check('无输入死亡', !!death, death ? `${death.label} @${death.dist}px` : '超时未死');
 
   // ---- 3. 空格蓄力：小蓄力 vs 满蓄力跳高差异（喊得越响跳得越高） ----
-  await page.reload();
-  await page.getByRole('button', { name: /空格调试模式/ }).click();
-  await poll(page, () => mode === 'play' && countdown <= 0, 6000, 100);
+  await startKeyboardRun(page);
   await injectClearTrack(page);
   const small = await maxAirOf(page, 180);
   const big = await maxAirOf(page, 500);
   check('空格蓄力跳高随蓄力增长', small >= 130 && small <= 195 && big >= 235 && big <= 275 && big > small, `180ms=${small}px / 500ms=${big}px`);
 
   // ---- 4. 触摸长按蓄力 = 满力跳（移动端入口） ----
-  await page.reload();
-  await page.getByRole('button', { name: /空格调试模式/ }).click();
-  await poll(page, () => mode === 'play' && countdown <= 0, 6000, 100);
+  await startKeyboardRun(page);
   await injectClearTrack(page);
   const touchAir = await page.evaluate(async () => {
     window.__clearTrack();
@@ -178,9 +175,7 @@ async function main() {
   check('麦克风渐强喊声首跳满力', ramp >= 230 && ramp <= 280, `${ramp}px`);
 
   // ---- 4c. 空中提前喊 → 落地缓冲跳继承喊声力度（不再固定最小力） ----
-  await page.reload();
-  await page.getByRole('button', { name: /空格调试模式/ }).click();
-  await poll(page, () => mode === 'play' && countdown <= 0, 6000, 100);
+  await startKeyboardRun(page);
   await injectClearTrack(page);
   const bufJump = await page.evaluate(async () => {
     window.__clearTrack();
@@ -246,10 +241,38 @@ async function main() {
   });
   check('狂暴中纸飞机仍致命', plane.dead && plane.label === '需求变更变更');
 
+  // ---- 7b. 首页：主题标题、无键盘模式入口、空榜不提示、设置面板收纳灵敏度与灵矽 ----
+  await page.goto(BASE + '/?nolinx');
+  await page.evaluate(() => { localStorage.removeItem(LB_KEY); toMenu(); });
+  const home = await page.evaluate(() => ({
+    h1: document.querySelector('#screen-start h1').textContent,
+    keyboardBtn: [...document.querySelectorAll('button')].some((b) => /空格调试/.test(b.textContent)),
+    lb: document.getElementById('lb-start').innerHTML,
+    panelHidden: document.getElementById('settings-panel').classList.contains('hidden'),
+    inPanel: !!document.querySelector('#settings-panel #sens') && !!document.querySelector('#settings-panel #btn-linx'),
+  }));
+  await page.click('#btn-settings');
+  const opened = await page.evaluate(() => !document.getElementById('settings-panel').classList.contains('hidden'));
+  await page.mouse.click(400, 400);
+  const closed = await page.evaluate(() => document.getElementById('settings-panel').classList.contains('hidden'));
+  check('首页布局：标题/无键盘入口/空榜无提示/设置面板开合',
+    home.h1.includes('别让吗喽掉进 Bug') && !home.h1.includes('声控跑酷') && !home.keyboardBtn && home.lb === '' &&
+    home.panelHidden && home.inPanel && opened && closed, JSON.stringify({ ...home, opened, closed }));
+
+  // ---- 7c. 默认自动连接灵矽：拦掉外网请求，连接失败时齿轮亮红点、状态写进设置面板 ----
+  await page.route('**/xrobo.qiniuapi.com/**', (r) => r.abort());
+  await page.goto(BASE + '/');
+  const auto = await poll(page, () => {
+    const s = document.getElementById('linx-status').textContent;
+    return s.includes('连接失败') ? { alert: document.getElementById('btn-settings').classList.contains('alert'), s } : null;
+  }, 8000, 200);
+  check('默认自动连接灵矽（失败亮红点）', !!auto && auto.alert, auto ? auto.s.slice(0, 40) : '超时未尝试连接');
+  await page.unroute('**/xrobo.qiniuapi.com/**');
+
   // ---- 8. 假麦克风全链路：开麦→噪音校准→试喊校准→开局（P0 核心路径首次自动化覆盖） ----
   const browser2 = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
   const page2 = await browser2.newPage({ viewport: { width: 1440, height: 860 } });
-  await page2.goto(BASE + '/');
+  await page2.goto(BASE + '/?nolinx');
   await page2.getByRole('button', { name: '🎤 开麦上班' }).click();
   const micState = await poll(page2, () => (mode === 'play' ? {
     active: voice.active,

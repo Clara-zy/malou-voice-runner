@@ -90,6 +90,7 @@ addEventListener('keydown', (e) => {
   if (k === 'Escape' || k === 'Esc') {
     if (mode === 'over') { $('name-input').blur(); toMenu(); }
     else if (mode === 'calib' || mode === 'ready') toMenu();
+    else if (mode === 'menu') closeSettings();
     return;
   }
   if (document.activeElement === $('name-input')) return; // 输花名时不响应任何游戏快捷键（含 F/M）
@@ -199,6 +200,7 @@ function toMenu() {
   Music.stop();
   if (window.linx) window.linx.stopSpeaking(); // 回主页时停掉结算口播
   resetMicUI(); // 复位开麦按钮/音量条，支持「Esc 回来 → 重新校准」
+  closeSettings();
   $('screen-over').classList.add('hidden');
   $('screen-start').classList.remove('hidden');
   lbRefreshStart();
