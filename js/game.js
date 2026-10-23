@@ -13,6 +13,8 @@ let deadInfo = null, winInfo = false, shake = 0;
 let jumpCd = 0, jumpBuf = 0, keyJump = false, spaceHeld = false, spaceHoldT = 0;
 let touchHeld = false, touchHoldT = 0, touchId = null;
 let shoutT = 0, shoutVol = 0; // 松手后的喊声包络：持续一小段时间，期间可给发疯值充电
+let armT = 0, armPeak = 0, armTotal = 0, pendingVol = 0; // 麦克风抓峰：过阈值后短窗抓峰值再起跳
+let surge = 0; // 大声跳的前冲加速（随时间衰减）
 let pendingScore = 0, saved = false;
 
 /* 计分与连躲 */
@@ -24,13 +26,13 @@ let pickups = [], particles = [], floaties = [];
 
 const curScore = () => Math.min(SCORE.CAP, Math.floor(lineBase) + bonusPts);
 
-/* 速度：难度曲线 300→380 + 终点冲刺 + 发疯加成 */
+/* 速度：难度曲线 300→380 + 终点冲刺 + 发疯加成 + 大声跳的前冲 */
 function speedFor() {
   const prog = clamp(dist / GOAL_DIST, 0, 1);
   let v = AUTO_V_START + (AUTO_V_END - AUTO_V_START) * prog;
   if (prog >= SPRINT_FROM) v += SPRINT_BONUS;
   if (berserkT > 0) v *= MAD.SPEED_MUL;
-  return v;
+  return v + surge;
 }
 
 /* 粒子与浮动文字 */
@@ -146,13 +148,6 @@ function triggerShout(t) {
   shoutT = 0.15 + t * 1.2;
 }
 
-function currentVol(dt) {
-  if (DEMO) return demoVol(dt);
-  let v = voice.active ? voice.update() : 0;
-  if (shoutT > 0) v = Math.max(v, shoutVol * clamp(shoutT / 0.2, 0, 1)); // 尾段 0.2s 线性收音
-  return v;
-}
-
 /* 演示模式：一个简单的自动玩 AI，也用来验证全套机制 */
 let demoPulse = 0;
 function nearestHazard() {
@@ -188,6 +183,7 @@ function resetRun() {
   deadInfo = null; winInfo = false; shake = 0;
   jumpCd = 0; jumpBuf = 0; demoPulse = 0; spaceHoldT = 0;
   touchHeld = false; touchHoldT = 0; touchId = null; shoutT = 0; shoutVol = 0;
+  armT = 0; armPeak = 0; armTotal = 0; pendingVol = 0; surge = 0;
   lineBase = 0; bonusPts = 0; combo = 0; maxCombo = 0;
   madness = 0; berserkT = 0; madCd = 0; madFrozen = false; madFlash = 0; madCount = 0; sprintDone = false;
   pendingScore = 0; saved = false;
@@ -238,19 +234,22 @@ function deathKey(o) {
   return o.label;
 }
 
-/* ================= 跳跃 ================= */
-function handleJump(vol, dt) {
+/* ================= 跳跃 =================
+ * 力度 V 的映射按「起跳线→满力线」的个人动态区间（voice.fullVol）线性取值，
+ * 空格/触摸/↑传入的合成喊声自带力度；麦克风路径由 step 里的抓峰逻辑产出 pendingVol。 */
+function handleJump(V, dt) {
   jumpCd = Math.max(0, jumpCd - dt);
   jumpBuf = Math.max(0, jumpBuf - dt);
   let want = 0;
   if (keyJump) { want = 1; keyJump = false; } // ↑ 等效满力度喊声
-  else if (vol > voice.Tjump) want = clamp((vol - voice.Tjump) / 0.12, 0, 1); // 喊得越响跳得越高
+  else if (V > voice.Tjump) want = clamp((V - voice.Tjump) / Math.max(0.02, voice.fullVol - voice.Tjump), 0, 1);
   if (want > 0 && jumpCd <= 0) {
     jumpCd = 0.3;
     if (player.grounded && countdown <= 0) {
       player.vy = -(JUMP_V_MIN + (JUMP_V_MAX - JUMP_V_MIN) * want);
       player.grounded = false;
       jumpBuf = 0;
+      surge = SURGE_MAX * want; // 越是大声跳，前冲越猛 → 跳得明显更远
       spawnBurst(player.x, GROUND - 6, ['#cdd8ff', '#8fa0d8'], 6, 140, 600);
       SFX.jump();
     } else {
@@ -285,12 +284,38 @@ function step(dt) {
   spaceHoldT = spaceHeld ? spaceHoldT + dt : 0;
   touchHoldT = touchHeld ? touchHoldT + dt : 0;
   shoutT = Math.max(0, shoutT - dt);
-  const vol = currentVol(dt);
+  surge = Math.max(0, surge - SURGE_DECAY * dt);
+
+  // —— 音量管线：麦克风音量（走抓峰）与合成喊声包络（自带力度）分开算 ——
+  const micVol = DEMO ? demoVol(dt) : (voice.active ? voice.update() : 0);
+  const synthVol = shoutT > 0 ? shoutVol * clamp(shoutT / 0.2, 0, 1) : 0;
+
+  // 抓峰：过阈值不立刻跳，短窗跟踪这口气的峰值，按峰值算力度。
+  // 否则力度被锁死在"刚过阈值的那一帧"（≈最小力），渐强喊声永远跳不高。
+  // 快喊 80ms 内出结果；还在爬升就续窗（总长封顶 120ms），慢起音也能抓到接近真实的峰。
+  if (armT > 0) {
+    armT -= dt; armTotal += dt;
+    if (micVol > armPeak) {
+      armPeak = micVol;
+      if (armTotal < 0.12) armT = Math.max(armT, 0.03);
+    }
+    if (armT <= 0 || armTotal >= 0.12 || micVol < armPeak * 0.85) { // 窗口到期 / 封顶 / 峰值已过
+      pendingVol = armPeak;
+      armT = 0; armTotal = 0;
+    }
+  } else if (micVol > voice.Tjump && jumpCd <= 0) {
+    armT = 0.08;
+    armPeak = micVol;
+    armTotal = 0;
+  }
+
+  const vol = Math.max(micVol, synthVol, pendingVol);
   lastVol = vol;
   // 蓄力时音量条同步上升（还没到喊出来的程度）
   const holdT = spaceHeld ? spaceHoldT : touchHeld ? touchHoldT : 0;
   if (holdT > 0) lastVol = Math.max(lastVol, voice.Tjump * 1.6 * Math.min(1, holdT / CHARGE_FULL_T));
   handleJump(vol, dt);
+  pendingVol = 0; // 抓峰产出只作用于这一帧
 
   // ===== 发疯值：喊=充电，安静=衰减，纸飞机靠近=冻结（闭嘴区规则） =====
   madFrozen = obstacles.some((o) => o.type === 'paper' && Math.abs(o.x + o.w / 2 - player.x) < MAD.FREEZE_DIST);

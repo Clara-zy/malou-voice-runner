@@ -11,6 +11,7 @@ class VoiceInput {
     this.floor = 0.004;    // 环境噪音底（校准得到）
     this.shoutPeak = 0;    // 玩家最大喊声（试喊校准得到；0 = 未校准）
     this.sens = 1.0;       // 灵敏度：>1 更容易触发
+    this.simLevel = null;  // 测试注入口：非 null 时 update 直接返回该值
   }
 
   // 「跳」的音量门槛：得真喊；喊得越响跳得越高（力度按超出量计算）
@@ -21,6 +22,13 @@ class VoiceInput {
       return clamp(this.shoutPeak * 0.45, Math.max(this.floor * 2, this.shoutPeak * 0.25), this.shoutPeak * 0.75) / this.sens;
     }
     return Math.max(0.17, this.floor * 3) / this.sens;
+  }
+
+  // 「满力度」音量线：达到它就跳到最高。校准过 = 自己嗓门的 90%，
+  // 这样从起跳线到满力之间整段都有力度梯度（绝对窗口会把校准后的力度压成二元）。
+  get fullVol() {
+    if (this.shoutPeak > 0) return Math.max(this.shoutPeak * 0.9, this.Tjump * 1.02);
+    return this.Tjump + 0.12 / Math.max(1, this.sens);
   }
 
   async start() {
@@ -83,22 +91,24 @@ class VoiceInput {
     });
   }
 
-  // 试喊校准：记录窗口内平滑音量的峰值，作为这个玩家的"满嗓门"基线
+  // 试喊校准：取窗口内原始 RMS 的 97 分位当"满嗓门"基线
+  // （用原始值而非平滑值：平滑会压低快速瞬态，导致阈值系统性偏低；97 分位剔除孤立毛刺）
   calibrateShout(ms = 1500) {
     return new Promise((resolve) => {
-      let peak = 0;
+      const raws = [];
       const t0 = performance.now();
       let done = false;
       const finish = () => {
         if (done) return;
         done = true;
-        this.shoutPeak = peak;
-        resolve(peak);
+        raws.sort((a, b) => a - b);
+        this.shoutPeak = raws[Math.floor(raws.length * 0.97)] || 0;
+        resolve(this.shoutPeak);
       };
       const tick = () => {
         if (done) return;
-        this.update();
-        if (this.level > peak) peak = this.level;
+        const raw = this.readRaw();
+        if (raw != null) raws.push(raw);
         if (performance.now() - t0 < ms) requestAnimationFrame(tick);
         else finish();
       };
@@ -125,13 +135,14 @@ class VoiceInput {
     return Math.sqrt(sum / this.bytes.length);
   }
 
-  // 每帧调用：快起慢落的平滑，喊声要跟手，安静要稳
+  // 每帧调用：快起慢落的平滑——攻击要快（喊声跟手），释放稍快（喊完不拖尾误触发）
   update() {
+    if (this.simLevel != null) { this.level = this.simLevel; return this.level; } // 测试注入口
     const raw = this.readRaw();
     if (raw == null) return this.level;
     this.level = raw > this.level
-      ? raw * 0.55 + this.level * 0.45
-      : raw * 0.12 + this.level * 0.88;
+      ? raw * 0.7 + this.level * 0.3
+      : raw * 0.18 + this.level * 0.82;
     return this.level;
   }
 }

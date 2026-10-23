@@ -283,11 +283,11 @@ function hudPill(x, y, text, size, color) {
 }
 
 function drawVolMeter(x, y, w, h) {
-  const maxV = voice.Tjump * 1.7;
+  const maxV = voice.fullVol * 1.2; // 计量条满刻度 = 满力线再留 20% 余量
   ctx.fillStyle = 'rgba(10,16,34,.75)';
   rr(x - 8, y - 6, w + 16, h + 30, 12);
   ctx.fill();
-  const jx = w / 1.7;
+  const jx = w * clamp(voice.Tjump / maxV, 0, 1);
   ctx.fillStyle = 'rgba(255,255,255,.10)';
   rr(x, y, w, h, 7);
   ctx.fill();

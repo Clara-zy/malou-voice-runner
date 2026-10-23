@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>吗喽声控跑酷 · 别让吗喽掉进 Bug</title>
 <!-- 改了 js/css 记得把 ?v= 加一，避免浏览器混用新旧缓存 -->
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <div id="stage">
@@ -106,10 +106,13 @@ const W = 1280, H = 720, GROUND = 600;
 const GRAVITY = 2600;
 const AUTO_V_START = 300, AUTO_V_END = 380;  // 难度曲线：全程从 300 渐进提速到 380
 const SPRINT_FROM = 0.92, SPRINT_BONUS = 40; // 终点前"上线冲刺"段额外加速
-const JUMP_V_MIN = 780, JUMP_V_MAX = 1080;   // 起跳初速度：喊得越响跳得越高越远（132px..224px）
+const JUMP_V_MIN = 720, JUMP_V_MAX = 1150;   // 起跳初速度：小喊≈100px 大跳≈254px（2.5 倍高度差，一眼可辨）
 const PLAYER_W = 64, PLAYER_H = 76;
 const PLAYER_X = 320;
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+
+/* 前冲：大声跳获得随力度衰减的临时加速，让"越喊跳得越远"在距离上可见 */
+const SURGE_MAX = 200, SURGE_DECAY = 220;
 
 /* 障碍难度随进度变化 */
 const DIFF = { GAP_PROG: 70, PIT_PROG: 55 };
@@ -141,9 +144,9 @@ const _goal = parseInt(qs.get('goal'), 10);
 const GOAL_DIST = Number.isFinite(_goal) && _goal >= 2000 ? _goal : 12000;
 
 /* 蓄力参数（空格 / 触摸长按共用）：按满 0.38s 等效一次满嗓门喊声
- * 功率沿整个蓄力期线性上升（0.13≈门槛+0.12 的满力度音量） */
+ * 功率沿整个蓄力期线性上升，映射到「起跳线→满力线」的个人动态区间 */
 const CHARGE_FULL_T = 0.38;
-function chargeVol(t) { return voice.Tjump + 0.13 * clamp(t / CHARGE_FULL_T, 0, 1); }
+function chargeVol(t) { return voice.Tjump + (voice.fullVol - voice.Tjump) * clamp(t / CHARGE_FULL_T, 0, 1); }
 
 /* 排行榜存储键 */
 const LB_KEY = 'malou.leaderboard', NAME_KEY = 'malou.name';
@@ -163,6 +166,7 @@ class VoiceInput {
     this.floor = 0.004;    // 环境噪音底（校准得到）
     this.shoutPeak = 0;    // 玩家最大喊声（试喊校准得到；0 = 未校准）
     this.sens = 1.0;       // 灵敏度：>1 更容易触发
+    this.simLevel = null;  // 测试注入口：非 null 时 update 直接返回该值
   }
 
   // 「跳」的音量门槛：得真喊；喊得越响跳得越高（力度按超出量计算）
@@ -173,6 +177,13 @@ class VoiceInput {
       return clamp(this.shoutPeak * 0.45, Math.max(this.floor * 2, this.shoutPeak * 0.25), this.shoutPeak * 0.75) / this.sens;
     }
     return Math.max(0.17, this.floor * 3) / this.sens;
+  }
+
+  // 「满力度」音量线：达到它就跳到最高。校准过 = 自己嗓门的 90%，
+  // 这样从起跳线到满力之间整段都有力度梯度（绝对窗口会把校准后的力度压成二元）。
+  get fullVol() {
+    if (this.shoutPeak > 0) return Math.max(this.shoutPeak * 0.9, this.Tjump * 1.02);
+    return this.Tjump + 0.12 / Math.max(1, this.sens);
   }
 
   async start() {
@@ -235,22 +246,24 @@ class VoiceInput {
     });
   }
 
-  // 试喊校准：记录窗口内平滑音量的峰值，作为这个玩家的"满嗓门"基线
+  // 试喊校准：取窗口内原始 RMS 的 97 分位当"满嗓门"基线
+  // （用原始值而非平滑值：平滑会压低快速瞬态，导致阈值系统性偏低；97 分位剔除孤立毛刺）
   calibrateShout(ms = 1500) {
     return new Promise((resolve) => {
-      let peak = 0;
+      const raws = [];
       const t0 = performance.now();
       let done = false;
       const finish = () => {
         if (done) return;
         done = true;
-        this.shoutPeak = peak;
-        resolve(peak);
+        raws.sort((a, b) => a - b);
+        this.shoutPeak = raws[Math.floor(raws.length * 0.97)] || 0;
+        resolve(this.shoutPeak);
       };
       const tick = () => {
         if (done) return;
-        this.update();
-        if (this.level > peak) peak = this.level;
+        const raw = this.readRaw();
+        if (raw != null) raws.push(raw);
         if (performance.now() - t0 < ms) requestAnimationFrame(tick);
         else finish();
       };
@@ -277,13 +290,14 @@ class VoiceInput {
     return Math.sqrt(sum / this.bytes.length);
   }
 
-  // 每帧调用：快起慢落的平滑，喊声要跟手，安静要稳
+  // 每帧调用：快起慢落的平滑——攻击要快（喊声跟手），释放稍快（喊完不拖尾误触发）
   update() {
+    if (this.simLevel != null) { this.level = this.simLevel; return this.level; } // 测试注入口
     const raw = this.readRaw();
     if (raw == null) return this.level;
     this.level = raw > this.level
-      ? raw * 0.55 + this.level * 0.45
-      : raw * 0.12 + this.level * 0.88;
+      ? raw * 0.7 + this.level * 0.3
+      : raw * 0.18 + this.level * 0.82;
     return this.level;
   }
 }
@@ -439,6 +453,8 @@ let deadInfo = null, winInfo = false, shake = 0;
 let jumpCd = 0, jumpBuf = 0, keyJump = false, spaceHeld = false, spaceHoldT = 0;
 let touchHeld = false, touchHoldT = 0, touchId = null;
 let shoutT = 0, shoutVol = 0; // 松手后的喊声包络：持续一小段时间，期间可给发疯值充电
+let armT = 0, armPeak = 0, armTotal = 0, pendingVol = 0; // 麦克风抓峰：过阈值后短窗抓峰值再起跳
+let surge = 0; // 大声跳的前冲加速（随时间衰减）
 let pendingScore = 0, saved = false;
 
 /* 计分与连躲 */
@@ -450,13 +466,13 @@ let pickups = [], particles = [], floaties = [];
 
 const curScore = () => Math.min(SCORE.CAP, Math.floor(lineBase) + bonusPts);
 
-/* 速度：难度曲线 300→380 + 终点冲刺 + 发疯加成 */
+/* 速度：难度曲线 300→380 + 终点冲刺 + 发疯加成 + 大声跳的前冲 */
 function speedFor() {
   const prog = clamp(dist / GOAL_DIST, 0, 1);
   let v = AUTO_V_START + (AUTO_V_END - AUTO_V_START) * prog;
   if (prog >= SPRINT_FROM) v += SPRINT_BONUS;
   if (berserkT > 0) v *= MAD.SPEED_MUL;
-  return v;
+  return v + surge;
 }
 
 /* 粒子与浮动文字 */
@@ -572,13 +588,6 @@ function triggerShout(t) {
   shoutT = 0.15 + t * 1.2;
 }
 
-function currentVol(dt) {
-  if (DEMO) return demoVol(dt);
-  let v = voice.active ? voice.update() : 0;
-  if (shoutT > 0) v = Math.max(v, shoutVol * clamp(shoutT / 0.2, 0, 1)); // 尾段 0.2s 线性收音
-  return v;
-}
-
 /* 演示模式：一个简单的自动玩 AI，也用来验证全套机制 */
 let demoPulse = 0;
 function nearestHazard() {
@@ -614,6 +623,7 @@ function resetRun() {
   deadInfo = null; winInfo = false; shake = 0;
   jumpCd = 0; jumpBuf = 0; demoPulse = 0; spaceHoldT = 0;
   touchHeld = false; touchHoldT = 0; touchId = null; shoutT = 0; shoutVol = 0;
+  armT = 0; armPeak = 0; armTotal = 0; pendingVol = 0; surge = 0;
   lineBase = 0; bonusPts = 0; combo = 0; maxCombo = 0;
   madness = 0; berserkT = 0; madCd = 0; madFrozen = false; madFlash = 0; madCount = 0; sprintDone = false;
   pendingScore = 0; saved = false;
@@ -664,19 +674,22 @@ function deathKey(o) {
   return o.label;
 }
 
-/* ================= 跳跃 ================= */
-function handleJump(vol, dt) {
+/* ================= 跳跃 =================
+ * 力度 V 的映射按「起跳线→满力线」的个人动态区间（voice.fullVol）线性取值，
+ * 空格/触摸/↑传入的合成喊声自带力度；麦克风路径由 step 里的抓峰逻辑产出 pendingVol。 */
+function handleJump(V, dt) {
   jumpCd = Math.max(0, jumpCd - dt);
   jumpBuf = Math.max(0, jumpBuf - dt);
   let want = 0;
   if (keyJump) { want = 1; keyJump = false; } // ↑ 等效满力度喊声
-  else if (vol > voice.Tjump) want = clamp((vol - voice.Tjump) / 0.12, 0, 1); // 喊得越响跳得越高
+  else if (V > voice.Tjump) want = clamp((V - voice.Tjump) / Math.max(0.02, voice.fullVol - voice.Tjump), 0, 1);
   if (want > 0 && jumpCd <= 0) {
     jumpCd = 0.3;
     if (player.grounded && countdown <= 0) {
       player.vy = -(JUMP_V_MIN + (JUMP_V_MAX - JUMP_V_MIN) * want);
       player.grounded = false;
       jumpBuf = 0;
+      surge = SURGE_MAX * want; // 越是大声跳，前冲越猛 → 跳得明显更远
       spawnBurst(player.x, GROUND - 6, ['#cdd8ff', '#8fa0d8'], 6, 140, 600);
       SFX.jump();
     } else {
@@ -711,12 +724,38 @@ function step(dt) {
   spaceHoldT = spaceHeld ? spaceHoldT + dt : 0;
   touchHoldT = touchHeld ? touchHoldT + dt : 0;
   shoutT = Math.max(0, shoutT - dt);
-  const vol = currentVol(dt);
+  surge = Math.max(0, surge - SURGE_DECAY * dt);
+
+  // —— 音量管线：麦克风音量（走抓峰）与合成喊声包络（自带力度）分开算 ——
+  const micVol = DEMO ? demoVol(dt) : (voice.active ? voice.update() : 0);
+  const synthVol = shoutT > 0 ? shoutVol * clamp(shoutT / 0.2, 0, 1) : 0;
+
+  // 抓峰：过阈值不立刻跳，短窗跟踪这口气的峰值，按峰值算力度。
+  // 否则力度被锁死在"刚过阈值的那一帧"（≈最小力），渐强喊声永远跳不高。
+  // 快喊 80ms 内出结果；还在爬升就续窗（总长封顶 120ms），慢起音也能抓到接近真实的峰。
+  if (armT > 0) {
+    armT -= dt; armTotal += dt;
+    if (micVol > armPeak) {
+      armPeak = micVol;
+      if (armTotal < 0.12) armT = Math.max(armT, 0.03);
+    }
+    if (armT <= 0 || armTotal >= 0.12 || micVol < armPeak * 0.85) { // 窗口到期 / 封顶 / 峰值已过
+      pendingVol = armPeak;
+      armT = 0; armTotal = 0;
+    }
+  } else if (micVol > voice.Tjump && jumpCd <= 0) {
+    armT = 0.08;
+    armPeak = micVol;
+    armTotal = 0;
+  }
+
+  const vol = Math.max(micVol, synthVol, pendingVol);
   lastVol = vol;
   // 蓄力时音量条同步上升（还没到喊出来的程度）
   const holdT = spaceHeld ? spaceHoldT : touchHeld ? touchHoldT : 0;
   if (holdT > 0) lastVol = Math.max(lastVol, voice.Tjump * 1.6 * Math.min(1, holdT / CHARGE_FULL_T));
   handleJump(vol, dt);
+  pendingVol = 0; // 抓峰产出只作用于这一帧
 
   // ===== 发疯值：喊=充电，安静=衰减，纸飞机靠近=冻结（闭嘴区规则） =====
   madFrozen = obstacles.some((o) => o.type === 'paper' && Math.abs(o.x + o.w / 2 - player.x) < MAD.FREEZE_DIST);
@@ -1097,11 +1136,11 @@ function hudPill(x, y, text, size, color) {
 }
 
 function drawVolMeter(x, y, w, h) {
-  const maxV = voice.Tjump * 1.7;
+  const maxV = voice.fullVol * 1.2; // 计量条满刻度 = 满力线再留 20% 余量
   ctx.fillStyle = 'rgba(10,16,34,.75)';
   rr(x - 8, y - 6, w + 16, h + 30, 12);
   ctx.fill();
-  const jx = w / 1.7;
+  const jx = w * clamp(voice.Tjump / maxV, 0, 1);
   ctx.fillStyle = 'rgba(255,255,255,.10)';
   rr(x, y, w, h, 7);
   ctx.fill();
@@ -1379,9 +1418,9 @@ $('sens').addEventListener('input', (e) => {
 
 function updateMeterDOM() {
   if (!voice.active) return;
-  const maxV = voice.Tjump * 1.7;
+  const maxV = voice.fullVol * 1.2;
   $('meter-fill').style.width = clamp(voice.level / maxV * 100, 0, 100) + '%';
-  $('mark-jump').style.left = (100 / 1.7) + '%';
+  $('mark-jump').style.left = clamp(voice.Tjump / maxV * 100, 0, 100) + '%';
 }
 
 </script>
