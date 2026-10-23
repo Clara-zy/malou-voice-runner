@@ -10,7 +10,7 @@ let dist = 0, camX = 0, speed = 0, tNow = 0, lastVol = 0;
 let obstacles = [], spawnX = 1000;
 let countdown = 0, goFlash = 0;
 let deadInfo = null, winInfo = false, shake = 0;
-let jumpCd = 0, jumpBuf = 0, keyJump = false, spaceHeld = false, spaceHoldT = 0;
+let jumpCd = 0, jumpBuf = 0, jumpBufWant = 0, keyJump = false, spaceHeld = false, spaceHoldT = 0;
 let touchHeld = false, touchHoldT = 0, touchId = null;
 let shoutT = 0, shoutVol = 0; // 松手后的喊声包络：持续一小段时间，期间可给发疯值充电
 let armT = 0, armPeak = 0, armTotal = 0, pendingVol = 0; // 麦克风抓峰：过阈值后短窗抓峰值再起跳
@@ -181,7 +181,7 @@ function resetRun() {
   player.y = GROUND; player.vy = 0; player.grounded = true;
   countdown = 2.4; goFlash = 0;
   deadInfo = null; winInfo = false; shake = 0;
-  jumpCd = 0; jumpBuf = 0; demoPulse = 0; spaceHoldT = 0;
+  jumpCd = 0; jumpBuf = 0; jumpBufWant = 0; demoPulse = 0; spaceHoldT = 0;
   touchHeld = false; touchHoldT = 0; touchId = null; shoutT = 0; shoutVol = 0;
   armT = 0; armPeak = 0; armTotal = 0; pendingVol = 0; surge = 0;
   lineBase = 0; bonusPts = 0; combo = 0; maxCombo = 0;
@@ -253,13 +253,13 @@ function handleJump(V, dt) {
       spawnBurst(player.x, GROUND - 6, ['#cdd8ff', '#8fa0d8'], 6, 140, 600);
       SFX.jump();
     } else {
-      jumpBuf = 0.12; // 落地前 0.12s 内的喊声会被缓存，落地立刻起跳
+      jumpBuf = 0.12; jumpBufWant = want; // 空中的喊声按其力度缓存，落地立刻起跳
     }
   }
   if (jumpBuf > 0 && player.grounded && countdown <= 0) {
-    player.vy = -JUMP_V_MIN;
+    player.vy = -(JUMP_V_MIN + (JUMP_V_MAX - JUMP_V_MIN) * jumpBufWant); // 缓冲跳继承喊声力度
     player.grounded = false;
-    jumpBuf = 0;
+    jumpBuf = 0; jumpBufWant = 0;
     spawnBurst(player.x, GROUND - 6, ['#cdd8ff', '#8fa0d8'], 6, 140, 600);
     SFX.jump();
   }
@@ -299,7 +299,8 @@ function step(dt) {
       armPeak = micVol;
       if (armTotal < 0.12) armT = Math.max(armT, 0.03);
     }
-    if (armT <= 0 || armTotal >= 0.12 || micVol < armPeak * 0.85) { // 窗口到期 / 封顶 / 峰值已过
+    if (armT <= 0 || armTotal >= 0.12 || micVol < armPeak * 0.85 || armPeak >= voice.fullVol) {
+      // 窗口到期 / 封顶 / 峰值已过 / 已达满力线（力度已封顶 1，多等无益，立即出窗省延迟）
       pendingVol = armPeak;
       armT = 0; armTotal = 0;
     }

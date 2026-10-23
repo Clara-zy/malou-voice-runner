@@ -169,6 +169,29 @@ async function main() {
   check('麦克风快喊抓峰满力跳', fast >= 230 && fast <= 280, `${fast}px`);
   check('麦克风渐强喊声最终满力（弹跳）', slow >= 230 && slow <= 280, `${slow}px`);
 
+  // ---- 4c. 空中提前喊 → 落地缓冲跳继承喊声力度（不再固定最小力） ----
+  await page.reload();
+  await page.getByRole('button', { name: /空格调试模式/ }).click();
+  await poll(page, () => mode === 'play' && countdown <= 0, 6000, 100);
+  await injectClearTrack(page);
+  const bufJump = await page.evaluate(async () => {
+    window.__clearTrack();
+    window.__maxAir = 0;
+    window.__rec = true;
+    const tick = () => {
+      window.__maxAir = Math.max(window.__maxAir, GROUND - player.y);
+      if (window.__rec) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' })); // 满力起跳
+    await new Promise((r) => setTimeout(r, 640)); // 滞空 ~0.885s，此时仍在空中且接近落地
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' })); // 空中再喊（进缓冲）
+    await new Promise((r) => setTimeout(r, 1100));
+    window.__rec = false;
+    return Math.round(window.__maxAir);
+  });
+  check('落地缓冲跳继承满力（≈254px）', bufJump >= 235 && bufJump <= 280, `${bufJump}px`);
+
   // ---- 5. 道具收集计分（清空赛道做纯道具断言） ----
   await startKeyboardRun(page);
   await injectClearTrack(page);
