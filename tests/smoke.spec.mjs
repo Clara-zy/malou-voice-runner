@@ -101,6 +101,93 @@ async function main() {
   check('demo 全程无 JS 错误', !errs.length && !(win && win.errs && win.errs.length), errs.join('; '));
   await page.waitForTimeout(4300); // 等 demo 自动重开
 
+  // ---- 1b. 套路段（同步调用 step 快速模拟，固定随机种子，不依赖真实时间） ----
+  await page.goto(BASE + '/?demo&nolinx');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    window.__seed = (seed) => {
+      let s = (seed * 2654435761) >>> 0;
+      Math.random = () => {
+        s = (s + 0x6D2B79F5) >>> 0;
+        let t = Math.imul(s ^ (s >>> 15), s | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    };
+    // 把吗喽放到指定进度、清空赛道，返回可放置套路段的起点
+    window.__placeAt = (prog) => {
+      resetRun(); countdown = 0;
+      dist = prog * GOAL_DIST; camX = dist; player.x = PLAYER_X + dist; speed = speedFor();
+      obstacles.length = 0; pickups.length = 0; spawnX = GOAL_DIST + 9999;
+      return player.x + 900;
+    };
+  });
+
+  const unlock = await page.evaluate(() => {
+    window.__seed(7);
+    const first = {};
+    let early = 0;
+    for (let p = 0; p < 1; p += 0.01) {
+      for (let k = 0; k < 200; k++) {
+        const pat = pickPattern(p);
+        if (!pat) continue;
+        if (p < STAGES[1].from) early++;
+        if (first[pat.id] === undefined) first[pat.id] = +p.toFixed(2);
+      }
+    }
+    return { early, first };
+  });
+  const need = { bugChain: 0.15, highLow: 0.15, planeThen: 0.35, bobaPit: 0.35, doublePit: 0.65 };
+  check('套路段按阶段解锁', unlock.early === 0 && Object.keys(need).every((id) => unlock.first[id] !== undefined && unlock.first[id] >= need[id] - 1e-9),
+    JSON.stringify(unlock.first));
+
+  const patRuns = await page.evaluate(() => {
+    const out = {};
+    for (const pat of PATTERNS) {
+      let pass = 0;
+      for (let k = 0; k < 20; k++) {
+        window.__seed(100 + k);
+        const x0 = window.__placeAt(Math.min(STAGES[pat.stage].from + 0.02 + k * 0.025, 0.9));
+        const end = pat.build(x0);
+        for (let i = 0; i < 900 && !deadInfo && player.x < end + 200; i++) step(1 / 60);
+        if (!deadInfo) pass++;
+      }
+      out[pat.id] = pass;
+    }
+    return out;
+  });
+  check('每种套路段演示 AI 各 20 次全部通过', Object.values(patRuns).every((n) => n === 20), JSON.stringify(patRuns));
+
+  const planeTrap = await page.evaluate(() => {
+    const pat = PATTERNS.find((p) => p.id === 'planeThen');
+    const labels = [];
+    for (let k = 0; k < 10; k++) {
+      window.__seed(300 + k);
+      pat.build(window.__placeAt(0.4 + k * 0.05));
+      const plane = obstacles.find((o) => o.type === 'paper');
+      for (let i = 0; i < 900 && plane.x + plane.w / 2 - player.x > 110; i++) step(1 / 60);
+      keyJump = true; // 纸飞机即将飞到头顶时满力起跳
+      for (let i = 0; i < 120 && !deadInfo; i++) step(1 / 60);
+      labels.push(deadInfo ? deadInfo.label : 'alive');
+    }
+    return labels;
+  });
+  check('闭嘴后起跳：纸飞机在头顶时起跳必死', planeTrap.every((l) => l === '需求变更变更'), planeTrap.join(','));
+
+  const fullRuns = await page.evaluate(() => {
+    const deaths = {};
+    let wins = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      window.__seed(seed);
+      resetRun(); countdown = 0;
+      for (let i = 0; i < 20000 && !deadInfo && !winInfo; i++) step(1 / 60);
+      if (winInfo) wins++;
+      else { const k = deadInfo ? deadInfo.label || deadInfo.type : 'timeout'; deaths[k] = (deaths[k] || 0) + 1; }
+    }
+    return { wins, deaths };
+  });
+  check('演示 AI 全程 30 局通关率 ≥ 28/30', fullRuns.wins >= 28, `${fullRuns.wins}/30 ${JSON.stringify(fullRuns.deaths)}`);
+
   // ---- 2. 无输入必死（第一个障碍前撞死） ----
   await startKeyboardRun(page);
   const death = await poll(page, () => window.__lastDeath ? { label: window.__lastDeath.label, dist: window.__lastDeath.dist } : null, 8000);

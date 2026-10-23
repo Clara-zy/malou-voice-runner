@@ -15,6 +15,21 @@ const SURGE_MAX = 200, SURGE_DECAY = 220;
 
 /* 障碍难度随进度变化 */
 const DIFF = { GAP_PROG: 70, PIT_PROG: 55 };
+const PLANE_V = 130; // 纸飞机迎面飞行速度
+
+/* 一局 = 一个工作日：按上线进度分阶段，每阶段解锁新套路段 */
+const STAGES = [
+  { from: 0,    icon: '🌅', time: '08:30', name: '早高峰通勤', tip: '热身：小 Bug 小声喊就能过',       patternChance: 0 },
+  { from: 0.15, icon: '☕', time: '10:00', name: '每日站会',   tip: '连环 Bug：落地马上再喊',           patternChance: 0.3 },
+  { from: 0.35, icon: '📝', time: '15:00', name: '需求又变了', tip: '纸飞机出没：先闭嘴，飞过去再喊', patternChance: 0.4 },
+  { from: 0.65, icon: '🌙', time: '22:00', name: '深夜加班',   tip: '技术债连环坑：落地马上再喊',     patternChance: 0.5 },
+  { from: 0.92, icon: '🚀', time: '02:00', name: '凌晨上线',   tip: '冲刺！上线就在眼前',             patternChance: 0.5 },
+];
+function stageAt(prog) {
+  let i = 0;
+  while (i + 1 < STAGES.length && prog >= STAGES[i + 1].from) i++;
+  return i;
+}
 
 /* 计分：跑动里程 + 连躲奖励 + 道具 + 捶爆奖励 */
 const SCORE = {

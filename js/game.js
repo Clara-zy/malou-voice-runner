@@ -27,10 +27,12 @@ let pickups = [], particles = [], floaties = [];
 const curScore = () => Math.min(SCORE.CAP, Math.floor(lineBase) + bonusPts);
 
 /* 速度：难度曲线 300→380 + 终点冲刺 + 发疯加成 + 大声跳的前冲 */
+function baseSpeed(prog) {
+  prog = clamp(prog, 0, 1);
+  return AUTO_V_START + (AUTO_V_END - AUTO_V_START) * prog + (prog >= SPRINT_FROM ? SPRINT_BONUS : 0);
+}
 function speedFor() {
-  const prog = clamp(dist / GOAL_DIST, 0, 1);
-  let v = AUTO_V_START + (AUTO_V_END - AUTO_V_START) * prog;
-  if (prog >= SPRINT_FROM) v += SPRINT_BONUS;
+  let v = baseSpeed(dist / GOAL_DIST);
   if (berserkT > 0) v *= MAD.SPEED_MUL;
   return v + surge;
 }
@@ -377,7 +379,7 @@ function step(dt) {
   // ===== 障碍推进 + 碰撞（发疯状态可捶爆地面障碍，纸飞机/深坑依然致命） =====
   fillObstacles();
   for (const o of obstacles) {
-    if (o.type === 'paper') o.x -= 130 * dt;
+    if (o.type === 'paper') o.x -= PLANE_V * dt;
     if (o.dead || o.type === 'pit') continue;
     if (aabb(playerBox(10), obBox(o, 8))) {
       if (berserkT > 0 && o.type !== 'paper') {
