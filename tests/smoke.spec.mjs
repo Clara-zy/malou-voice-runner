@@ -140,6 +140,8 @@ async function main() {
   // 只量第一跳：量整段最大值会被持续喊声的第二下弹跳掩盖「首跳被锁最小力」的问题
   const micJump = async (rampMs) => page.evaluate(async (ms) => {
     window.__clearTrack();
+    shoutT = 0; jumpBuf = 0; // 清掉上个用例残留的喊声包络/缓冲跳，并等落地，否则会把上一跳的落地当成首跳结束
+    while (!player.grounded) await new Promise((r) => setTimeout(r, 30));
     voice.active = true;
     voice.shoutPeak = 0.5;           // 模拟已校准：Tjump=0.225，满力线=0.45
     voice.simLevel = 0.05;
@@ -269,15 +271,6 @@ async function main() {
     return bad;
   });
   check('Tjump 阈值无死区（峰值×灵敏度 15 组矩阵）', matrix.length === 0, matrix.join(' ; ') || '全部 Tjump<peak');
-
-  // 回声消除开关：切换即关麦，重新开麦按新约束生效
-  await page2.evaluate(() => toMenu());
-  await page2.locator('#aec').uncheck();
-  const aecOff = await page2.evaluate(() => ({ active: voice.active, btn: document.getElementById('btn-mic').disabled }));
-  await page2.getByRole('button', { name: '🎤 开麦上班' }).click();
-  const aecState = await poll(page2, () => (mode === 'calib' ? { active: voice.active, aec: voice.aecApplied } : null), 8000, 100);
-  check('回声消除开关：切换关麦并按新设置重开', !aecOff.active && !aecOff.btn && !!aecState && aecState.active && aecState.aec === false,
-    aecState ? `aecApplied=${aecState.aec}` : '超时');
   await browser2.close();
 
   // ---- 8. 全程无未捕获 JS 错误 ----

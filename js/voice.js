@@ -12,8 +12,6 @@ class VoiceInput {
     this.shoutPeak = 0;    // 玩家最大喊声（试喊校准得到；0 = 未校准）
     this.sens = 1.0;       // 灵敏度：>1 更容易触发
     this.simLevel = null;  // 测试注入口：非 null 时 update 直接返回该值
-    this.echoCancel = true;  // 请求的回声消除开关（改了要重开麦才生效）
-    this.aecApplied = null;  // 浏览器实际生效的回声消除状态（可能无视请求）
   }
 
   // 「跳」的音量门槛：得真喊；喊得越响跳得越高（力度按超出量计算）
@@ -38,17 +36,13 @@ class VoiceInput {
     if (this.active) { await this.ctx.resume(); return; }
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        // 回声消除默认开：大屏音箱的声音进了麦克风也不至于误触发跳跃；
-        // 但它在 BGM 与人声重叠时可能压低喊声，所以留开关给现场对比
-        echoCancellation: this.echoCancel,
+        // 回声消除开着：大屏音箱的声音进了麦克风也不至于误触发跳跃
+        echoCancellation: true,
         // 关掉降噪和自动增益，保留真实音量曲线，阈值才稳定
         noiseSuppression: false,
         autoGainControl: false,
       },
     });
-    const track = this.stream.getAudioTracks()[0];
-    const st = track && track.getSettings ? track.getSettings() : {};
-    this.aecApplied = typeof st.echoCancellation === 'boolean' ? st.echoCancellation : null;
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     await this.ctx.resume(); // 必须在用户点击手势里调用
     this.source = this.ctx.createMediaStreamSource(this.stream);
