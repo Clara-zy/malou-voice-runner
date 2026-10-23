@@ -35,7 +35,7 @@ function pushPlane(meetX) {
 function spawnOne(x, prog) {
   const r = Math.random();
   let type;
-  if (prog < 0.06) type = 'bug';
+  if (prog < STAGES[1].from) type = 'bug'; // 通勤阶段热身：只出小 Bug
   else if (prog > 0.28 && r < 0.2) type = 'paper';
   else if (prog > 0.2 && r < 0.42) type = 'pit';
   else type = r < 0.72 ? 'bug' : 'blocker';

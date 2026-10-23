@@ -24,6 +24,7 @@ const SFX = {
   die() { this.beep(220, 0.5, 'sawtooth', 0.08, -160); },
   tick() { this.beep(880, 0.06, 'square', 0.045); },
   go() { this.beep(1320, 0.2, 'square', 0.06); },
+  stage() { this.beep(784, 0.12, 'triangle', 0.06); setTimeout(() => this.beep(1047, 0.18, 'triangle', 0.06), 110); },
   win() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.beep(f, 0.16, 'triangle', 0.07), i * 130)); },
   pickup() { this.beep(988, 0.09, 'triangle', 0.06); setTimeout(() => this.beep(1319, 0.12, 'triangle', 0.06), 70); },
   destroy() { this.beep(180, 0.3, 'sawtooth', 0.09, -120); this.beep(90, 0.25, 'square', 0.08, -40); },

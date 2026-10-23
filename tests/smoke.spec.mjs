@@ -188,6 +188,35 @@ async function main() {
   });
   check('演示 AI 全程 30 局通关率 ≥ 28/30', fullRuns.wins >= 28, `${fullRuns.wins}/30 ${JSON.stringify(fullRuns.deaths)}`);
 
+  // ---- 1c. 阶段：边界划分、整局依次切换并弹横幅、天色随阶段渐变 ----
+  const stages = await page.evaluate(() => {
+    const bounds = [0, 0.149, 0.15, 0.5, 0.7, 0.95].map(stageAt).join('');
+    window.__seed(9);
+    obstacles.length = 0;
+    for (let k = 0; k < 300; k++) spawnOne(1000 + k * 2, (k % 15) / 100);
+    const warmup = [...new Set(obstacles.map((o) => o.type))].join(',');
+    window.__seed(42);
+    resetRun(); countdown = 0;
+    const seen = [];
+    let bannerOk = true;
+    for (let i = 0; i < 20000 && !deadInfo && !winInfo; i++) {
+      const before = stageIdx;
+      step(1 / 60);
+      if (stageIdx !== before) {
+        seen.push(stageIdx);
+        if (!(stageBanner > STAGE_BANNER_T - 0.05)) bannerOk = false;
+      }
+    }
+    const sky = (p) => { const m = stageMix(p); return mixHex(m.cur.sky[0], m.next.sky[0], m.t); };
+    const pure2 = sky(0.6), mid = sky(0.635), pure3 = sky(0.7);
+    return { bounds, warmup, seen: seen.join(''), bannerOk, won: winInfo, skies: [sky(0.05), sky(0.2), sky(0.45), pure3, sky(0.95)], pure2, mid, pure3 };
+  });
+  check('阶段边界划分正确', stages.bounds === '001234', stages.bounds);
+  check('通勤阶段热身只出小 Bug', stages.warmup === 'bug', stages.warmup);
+  check('整局依次经过 5 个阶段且每次切换弹横幅', stages.won && stages.seen === '1234' && stages.bannerOk, `seen=${stages.seen} banner=${stages.bannerOk}`);
+  check('天色随阶段不同且交界处渐变', new Set(stages.skies).size === 5 && stages.mid !== stages.pure2 && stages.mid !== stages.pure3,
+    `${stages.pure2} → ${stages.mid} → ${stages.pure3}`);
+
   // ---- 2. 无输入必死（第一个障碍前撞死） ----
   await startKeyboardRun(page);
   const death = await poll(page, () => window.__lastDeath ? { label: window.__lastDeath.label, dist: window.__lastDeath.dist } : null, 8000);

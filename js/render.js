@@ -5,15 +5,18 @@ function draw() {
   ctx.save();
   if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 26, (Math.random() - 0.5) * shake * 26);
 
+  const sm = stageMix(clamp(dist / GOAL_DIST, 0, 1));
+  const colors = sm.cur.sky.map((c, k) => mixHex(c, sm.next.sky[k], sm.t));
   const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#0d1631');
-  sky.addColorStop(0.55, '#22345f');
-  sky.addColorStop(1, '#3a517f');
+  sky.addColorStop(0, colors[0]);
+  sky.addColorStop(0.55, colors[1]);
+  sky.addColorStop(1, colors[2]);
   ctx.fillStyle = sky;
   ctx.fillRect(-40, -40, W + 80, H + 80);
 
+  drawOrb(sm);
   drawClouds();
-  drawBuildings();
+  drawBuildings(sm.cur.lit + (sm.next.lit - sm.cur.lit) * sm.t);
   drawGround();
   drawObstacles();
   drawPickups();
@@ -25,9 +28,33 @@ function draw() {
 
   if (berserkT > 0) drawBerserkVignette();
   if (mode === 'play') drawHUD();
+  if (mode === 'play' && stageBanner > 0 && countdown <= 0) drawStageBanner();
   if (mode === 'play' && madFlash > 0) drawMadFlash();
   if (mode === 'play' && countdown > 0) drawCountdown();
   if (mode === 'play' && goFlash > 0) drawGo();
+}
+
+/* 阶段天色：沿用当前阶段配色，进入下一阶段前 STAGE_BLEND 进度内渐变过去 */
+function stageMix(prog) {
+  const i = stageAt(prog), cur = STAGES[i], next = STAGES[i + 1];
+  const t = next ? clamp((prog - (next.from - STAGE_BLEND)) / STAGE_BLEND, 0, 1) : 0;
+  return { cur, next: next || cur, t };
+}
+
+function drawOrb({ cur, next, t }) {
+  const y = cur.orb.y + (next.orb.y - cur.orb.y) * t;
+  ctx.font = '72px ' + EMOJI_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (cur.orb.e === next.orb.e) {
+    ctx.fillText(cur.orb.e, 1000, y);
+  } else {
+    ctx.globalAlpha = 1 - t;
+    ctx.fillText(cur.orb.e, 1000, y);
+    ctx.globalAlpha = t;
+    ctx.fillText(next.orb.e, 1000, y);
+    ctx.globalAlpha = 1;
+  }
 }
 
 function drawClouds() {
@@ -43,7 +70,7 @@ function drawClouds() {
   ctx.globalAlpha = 1;
 }
 
-function drawBuildings() {
+function drawBuildings(lit) {
   const par = 0.3, tile = 230;
   const off = camX * par;
   for (let i = Math.floor(off / tile) - 1; i * tile - off < W + 40; i++) {
@@ -57,7 +84,7 @@ function drawBuildings() {
     ctx.fillRect(bx + bw * 0.4, by - 26, 8, 26);
     for (let wy = by + 18; wy < GROUND - 24; wy += 30) {
       for (let wx = bx + 14; wx < bx + bw - 18; wx += 26) {
-        ctx.fillStyle = hash(i * 131 + wx * 0.7 + wy * 1.3) > 0.72 ? 'rgba(255,214,110,.75)' : 'rgba(90,120,200,.14)';
+        ctx.fillStyle = hash(i * 131 + wx * 0.7 + wy * 1.3) > 1 - lit ? 'rgba(255,214,110,.75)' : 'rgba(90,120,200,.14)';
         ctx.fillRect(wx, wy, 12, 14);
       }
     }
@@ -185,6 +212,30 @@ function drawBerserkVignette() {
   g.addColorStop(1, `rgba(255,40,40,${a})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
+}
+
+/* 阶段横幅：进入新阶段时从顶部滑入，显示时间、名称和本阶段提示 */
+function drawStageBanner() {
+  const st = STAGES[stageIdx];
+  const t = STAGE_BANNER_T - stageBanner;
+  const enter = Math.min(1, t / 0.25);
+  ctx.globalAlpha = Math.min(enter, stageBanner / 0.4);
+  const bw = 540, bh = 76, bx = W / 2 - bw / 2, by = 100 - (1 - enter) * 24;
+  ctx.fillStyle = 'rgba(10,16,34,.96)';
+  rr(bx, by, bw, bh, 16);
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#ffd34d';
+  ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '800 28px system-ui';
+  ctx.fillStyle = '#ffd34d';
+  ctx.fillText(`${st.icon} ${st.time} · ${st.name}`, W / 2, by + 28);
+  ctx.font = '600 17px system-ui';
+  ctx.fillStyle = '#cdd8ff';
+  ctx.fillText(st.tip, W / 2, by + 57);
+  ctx.globalAlpha = 1;
 }
 
 function drawMadFlash() {
@@ -325,6 +376,8 @@ function drawHUD() {
     rr(px, py, Math.max(10, pw * pr), ph, 8);
     ctx.fill();
   }
+  ctx.fillStyle = 'rgba(255,255,255,.55)';
+  for (let i = 1; i < STAGES.length; i++) ctx.fillRect(px + pw * STAGES[i].from - 1, py - 3, 2, ph + 6);
   ctx.font = '16px ' + EMOJI_FONT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -332,7 +385,8 @@ function drawHUD() {
   ctx.fillText('🏁', px + pw + 16, py + ph / 2);
   ctx.font = '600 15px system-ui';
   ctx.fillStyle = '#cdd8ff';
-  ctx.fillText(`上线进度 ${Math.floor(pr * 100)}%`, px + pw / 2, py + ph + 20);
+  const st = STAGES[stageIdx];
+  ctx.fillText(`${st.icon} ${st.time} ${st.name} · 上线进度 ${Math.floor(pr * 100)}%`, px + pw / 2, py + ph + 20);
 
   drawVolMeter(W - 324, 20, 300, 26);
   drawMadMeter(W - 324, 66, 300, 14);

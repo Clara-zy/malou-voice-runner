@@ -21,6 +21,8 @@ let pendingScore = 0, saved = false;
 let lineBase = 0, bonusPts = 0, combo = 0, maxCombo = 0;
 /* 发疯值 */
 let madness = 0, berserkT = 0, madCd = 0, madFrozen = false, madFlash = 0, madCount = 0, sprintDone = false;
+/* 阶段：当前所处阶段与切换横幅计时 */
+let stageIdx = 0, stageBanner = 0;
 /* 道具与粒子 */
 let pickups = [], particles = [], floaties = [];
 
@@ -190,6 +192,7 @@ function resetRun() {
   armT = 0; armPeak = 0; armTotal = 0; pendingVol = 0; surge = 0;
   lineBase = 0; bonusPts = 0; combo = 0; maxCombo = 0;
   madness = 0; berserkT = 0; madCd = 0; madFrozen = false; madFlash = 0; madCount = 0; sprintDone = false;
+  stageIdx = 0; stageBanner = 0;
   pendingScore = 0; saved = false;
   mode = 'play';
   Music.start();
@@ -276,6 +279,7 @@ function step(dt) {
   shake = Math.max(0, shake - dt * 1.4);
   goFlash = Math.max(0, goFlash - dt);
   madFlash = Math.max(0, madFlash - dt);
+  stageBanner = Math.max(0, stageBanner - dt);
   if (deadInfo || winInfo) return; // 定格画面，等结算面板
 
   if (countdown > 0) {
@@ -283,7 +287,7 @@ function step(dt) {
     countdown -= dt;
     const now = Math.ceil(countdown);
     if (now !== prev && now > 0) SFX.tick();
-    if (countdown <= 0) { goFlash = 0.7; SFX.go(); }
+    if (countdown <= 0) { goFlash = 0.7; stageBanner = STAGE_BANNER_T; SFX.go(); }
     return;
   }
 
@@ -353,9 +357,12 @@ function step(dt) {
   camX = dist;
   player.x = PLAYER_X + dist; // 玩家世界坐标前进，屏幕位置保持固定
   const prog = dist / GOAL_DIST;
-  if (!sprintDone && prog >= SPRINT_FROM) {
-    sprintDone = true;
-    textPop(player.x, GROUND - 300, '🚀 上线冲刺!', '#6be08a', 28);
+  if (!sprintDone && prog >= SPRINT_FROM) sprintDone = true;
+  const si = stageAt(prog);
+  if (si !== stageIdx) {
+    stageIdx = si;
+    stageBanner = STAGE_BANNER_T;
+    SFX.stage();
   }
   Music.rate = 1 + 0.15 * clamp(prog, 0, 1) + (berserkT > 0 ? 0.25 : 0) + (sprintDone ? 0.1 : 0);
 
