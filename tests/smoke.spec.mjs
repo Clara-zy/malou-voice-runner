@@ -357,6 +357,23 @@ async function main() {
   });
   check('狂暴中纸飞机仍致命', plane.dead && plane.label === '需求变更变更');
 
+  // ---- 7a. 结算显示阶段：死亡显示倒在哪个阶段，通关显示熬过全部阶段，口播去掉图标 ----
+  const overStage = async (prog, kill) => {
+    await startKeyboardRun(page);
+    await injectClearTrack(page);
+    await page.evaluate(({ prog, kill }) => {
+      window.__clearTrack();
+      dist = prog * GOAL_DIST; camX = dist; player.x = PLAYER_X + dist;
+      if (kill) setTimeout(() => die({ type: 'bug', label: 'NullPointerException' }), 100);
+    }, { prog, kill });
+    return poll(page, () => (mode === 'over' ? { text: document.getElementById('over-stage').textContent, speech: overSpeech() } : null), 8000, 100);
+  };
+  const deadStage = await overStage(0.72, true);
+  const winStage = await overStage(0.995, false);
+  check('结算显示倒在哪个阶段', !!deadStage && deadStage.text === '🌙 倒在了 22:00 深夜加班 · 上线进度 72%' && deadStage.speech.includes('倒在了 22:00 深夜加班') && !deadStage.speech.includes('🌙'),
+    deadStage ? deadStage.text : '超时');
+  check('通关显示熬过全部阶段', !!winStage && winStage.text.includes('全部 5 个阶段'), winStage ? winStage.text : '超时');
+
   // ---- 7b. 首页：主题标题、无键盘模式入口、空榜不提示、设置面板收纳灵敏度与灵矽 ----
   await page.goto(BASE + '/?nolinx');
   await page.evaluate(() => { localStorage.removeItem(LB_KEY); toMenu(); });
