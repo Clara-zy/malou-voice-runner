@@ -72,6 +72,7 @@ const GLIDE = { GRAVITY_MUL: 0.45, MIN_AIR: 20 };
 /* 终点 Boss：进入凌晨上线阶段后，产品经理拦路扔需求 */
 const BOSS = {
   FROM: 0.92,           // 与 STAGES[4] 对齐
+  AHEAD: 540,           // 出场位置 = 镜头左缘 + AHEAD；不能按终点反推，否则短赛程 Boss 落在吗喽身后
   TIMEOUT: 8,           // 秒；超时撤兵，避免卡死
   THROW_MIN: 1.1, THROW_MAX: 1.4,
   BUG_CHANCE: 0.28,     // 否则扔纸飞机

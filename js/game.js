@@ -444,7 +444,7 @@ function step(dt) {
   }
   // ===== Boss 战：进入凌晨上线阶段后生成产品经理 =====
   if (!boss && prog >= BOSS.FROM && !winInfo) {
-    boss = { x: GOAL_DIST - 420, age: 0, throwCd: 0.8, state: 'live', iframes: 0 };
+    boss = { x: dist + BOSS.AHEAD, age: 0, throwCd: 0.8, state: 'live', iframes: 0 };
     textPop(player.x, GROUND - 320, '👔 产品经理来了!', '#ff9a3d', 28);
     spawnX = GOAL_DIST + 9999; // 停掉散件/套路生成
     // 清掉镜头前所有旧障碍，避免宽坑卡在 Boss 门前（Boss 自己会扔飞机/Bug）

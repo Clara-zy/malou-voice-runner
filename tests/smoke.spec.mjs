@@ -565,6 +565,49 @@ async function main() {
   check('Boss 段纸飞机仍致命', bossFight.planeKill, JSON.stringify(bossFight));
   check('Boss 超时撤兵后可通关', bossFight.fled && bossFight.canWin, JSON.stringify(bossFight));
 
+  // ---- 7a3. 短赛程 Boss 也在前方出场，不把吗喽往回拽 ----
+  const shortBoss = [];
+  for (const goal of [12000, 3000, 2400]) {
+    await page.goto(`${BASE}/?nolinx&goal=${goal}`);
+    shortBoss.push(await page.evaluate(() => {
+      resetRun(); countdown = 0;
+      obstacles.length = 0; pickups.length = 0;
+      dist = BOSS.FROM * GOAL_DIST - 2; camX = dist; player.x = PLAYER_X + dist; speed = speedFor();
+      let back = 0, prev = dist;
+      for (let i = 0; i < 30; i++) {
+        step(1 / 60);
+        back = Math.max(back, prev - dist);
+        prev = dist;
+      }
+      return { goal: GOAL_DIST, ahead: boss ? Math.round(boss.x - player.x) : null, back: Math.round(back) };
+    }));
+  }
+  check('Boss 在吗喽前方出场且不回拽（含短赛程）',
+    shortBoss.every((b) => b.ahead > 0 && b.back === 0), JSON.stringify(shortBoss));
+
+  // ---- 7a4. SW 静态资源按版本号精确命中：旧缓存不能冒充新 ?v= 资源；断网仍回落缓存 ----
+  const swCtx = await browser.newContext();
+  const swPage = await swCtx.newPage();
+  await swPage.goto(BASE + '/?nolinx');
+  await swPage.evaluate(() => navigator.serviceWorker.ready);
+  await swPage.reload();
+  const sw = await poll(swPage, async () => {
+    if (!navigator.serviceWorker.controller) return null;
+    const keys = (await caches.keys()).filter((k) => k.startsWith('malou-'));
+    if (!keys.length) return null;
+    const c = await caches.open(keys[0]);
+    await c.put('js/util.js', new Response('/*STALE*/', { headers: { 'Content-Type': 'text/javascript' } }));
+    const fresh = await (await fetch('js/util.js?v=probe-' + Date.now())).text();
+    return { fresh: fresh.includes('STALE') ? 'STALE' : 'ok' };
+  }, 8000, 200);
+  await swCtx.setOffline(true);
+  const offline = await swPage.evaluate(async () => {
+    try { return (await (await fetch('js/sfx.js?v=offline-probe')).text()).includes('SFX') ? 'ok' : 'empty'; } catch (e) { return 'fail'; }
+  });
+  await swCtx.close();
+  check('SW 不用旧缓存冒充新版本资源', !!sw && sw.fresh === 'ok', JSON.stringify(sw));
+  check('SW 断网时回落已缓存资源', offline === 'ok', offline);
+
   // ---- 7b. 首页：主题标题、无键盘模式入口、空榜不提示、设置面板收纳灵敏度与灵矽 ----
   await page.goto(BASE + '/?nolinx');
   await page.evaluate(() => { localStorage.removeItem(LB_KEY); toMenu(); });
