@@ -28,6 +28,7 @@ let pickups = [], particles = [], floaties = [];
 /* 护盾 / 香蕉摸鱼 */
 let shield = 0, shieldBlocks = 0;
 let bananas = 0, slackT = 0, slackCount = 0;
+let gliding = false, glideHint = false; // 空中长音滑翔；本局是否已提示过
 
 const curScore = () => Math.min(SCORE.CAP, Math.floor(lineBase) + bonusPts);
 
@@ -171,6 +172,12 @@ function demoVol(dt) {
   demoPulse = Math.max(0, demoPulse - dt);
   if (demoPulse > 0) return 0.3;
   const n = nearestHazard();
+  // 空中过宽坑：持续喊声滑翔，直到越过坑沿
+  if (!player.grounded) {
+    for (const o of obstacles) {
+      if (o.type === 'pit' && o.w >= 200 && player.x > o.x - 40 && player.x < o.x + o.w + 20) return 0.3;
+    }
+  }
   if (n && player.grounded) {
     if (n.o.type === 'paper') return 0;                            // 纸飞机：闭嘴
     // 触发距离按当前速度等比缩放：提速后提前量也要加大
@@ -199,6 +206,7 @@ function resetRun() {
   madness = 0; berserkT = 0; madCd = 0; madFrozen = false; madFlash = 0; madCount = 0; sprintDone = false;
   stageIdx = 0; stageBanner = 0;
   shield = 0; shieldBlocks = 0; bananas = 0; slackT = 0; slackCount = 0;
+  gliding = false; glideHint = false;
   pendingScore = 0; saved = false;
   mode = 'play';
   Music.start();
@@ -356,7 +364,8 @@ function step(dt) {
   // —— 音量管线：麦克风音量（走抓峰）与合成喊声包络（自带力度）分开算 ——
   // 摸鱼时间用演示 AI 自动跳，仍可被玩家手动喊声覆盖
   slackT = Math.max(0, slackT - dt);
-  const autoVol = DEMO ? demoVol(dt) : (slackT > 0 ? slackVol(dt) : 0);
+  // window.__muteDemo：测试用，强制关掉演示 AI 音量（验证「不滑翔必掉」）
+  const autoVol = (DEMO && !window.__muteDemo) ? demoVol(dt) : (slackT > 0 ? slackVol(dt) : 0);
   const micVol = Math.max(autoVol, voice.active && !DEMO ? voice.update() : 0);
   const synthVol = shoutT > 0 ? shoutVol * clamp(shoutT / 0.2, 0, 1) : 0;
 
@@ -426,8 +435,15 @@ function step(dt) {
   }
   Music.rate = 1 + 0.15 * clamp(prog, 0, 1) + (berserkT > 0 ? 0.25 : 0) + (sprintDone ? 0.1 : 0);
 
-  // ===== 竖直物理 =====
-  player.vy += GRAVITY * dt;
+  // ===== 竖直物理（空中持续喊 → 长音滑翔，重力降低） =====
+  const airH = GROUND - player.y;
+  // 只在下落段滑翔：上升段减重力会把跳高抬到离谱，破坏「喊得越响跳得越高」的手感
+  gliding = !player.grounded && player.vy > 0 && airH >= GLIDE.MIN_AIR && vol >= voice.Tjump && countdown <= 0;
+  if (gliding && !glideHint) {
+    glideHint = true;
+    textPop(player.x, player.y - 120, '🎙️ 滑翔中', '#a8d4ff', 22);
+  }
+  player.vy += GRAVITY * (gliding ? GLIDE.GRAVITY_MUL : 1) * dt;
   player.y += player.vy * dt;
   const overPit = isOverPit();
   if (!overPit && player.y >= GROUND && player.vy >= 0) {

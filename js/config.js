@@ -26,7 +26,7 @@ const STAGES = [
     sky: ['#1d3d6e', '#3a6ea5', '#79a9d1'], lit: 0.05, orb: { e: '☀️', y: 150 } },
   { from: 0.35, icon: '📝', time: '15:00', name: '需求又变了', tip: '纸飞机出没：先闭嘴，飞过去再喊', patternChance: 0.4,
     sky: ['#2a2f5e', '#7a4b78', '#d07a5a'], lit: 0.2, orb: { e: '☀️', y: 250 } },
-  { from: 0.65, icon: '🌙', time: '22:00', name: '深夜加班',   tip: '技术债连环坑：落地马上再喊',     patternChance: 0.5,
+  { from: 0.65, icon: '🌙', time: '22:00', name: '深夜加班',   tip: '宽坑要空中持续喊——滑翔过去',   patternChance: 0.5,
     sky: ['#0d1631', '#22345f', '#3a517f'], lit: 0.32, orb: { e: '🌙', y: 170 } },
   { from: 0.92, icon: '🚀', time: '02:00', name: '凌晨上线',   tip: '冲刺！上线就在眼前',             patternChance: 0.5,
     sky: ['#05060f', '#1a1240', '#3b2466'], lit: 0.55, orb: { e: '🌙', y: 150 } },
@@ -65,6 +65,9 @@ const MAD = {
   BERSERK_T: 5, COOLDOWN: 3,
   SPEED_MUL: 1.3, SCORE_MUL: 2,
 };
+
+/* 长音滑翔：空中音量过起跳线时减缓下落 */
+const GLIDE = { GRAVITY_MUL: 0.45, MIN_AIR: 20 };
 
 /* URL 参数：?demo 自动演示模式；?goal=3000 缩短赛程（默认 12000px = 1000 行代码） */
 const qs = new URLSearchParams(location.search);

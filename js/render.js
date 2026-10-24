@@ -288,6 +288,19 @@ function drawPlayer() {
       ctx.stroke();
     }
   }
+  // 滑翔音浪线
+  if (gliding && !deadInfo) {
+    ctx.strokeStyle = 'rgba(168,212,255,.55)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const ly = player.y - 70 + i * 18;
+      const wave = Math.sin(tNow * 14 + i) * 6;
+      ctx.beginPath();
+      ctx.moveTo(sx - 40, ly + wave);
+      ctx.quadraticCurveTo(sx - 70, ly - wave, sx - 100 - i * 8, ly + wave * 0.5);
+      ctx.stroke();
+    }
+  }
 
   if (berserkT > 0 && !deadInfo) {
     // 发疯光环

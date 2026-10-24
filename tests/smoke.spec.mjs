@@ -114,11 +114,16 @@ async function main() {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
       };
     };
+    window.__clearTrack = () => {
+      obstacles.length = 0;
+      pickups.length = 0;
+      spawnX = GOAL_DIST + 9999;
+    };
     // 把吗喽放到指定进度、清空赛道，返回可放置套路段的起点
     window.__placeAt = (prog) => {
       resetRun(); countdown = 0;
       dist = prog * GOAL_DIST; camX = dist; player.x = PLAYER_X + dist; speed = speedFor();
-      obstacles.length = 0; pickups.length = 0; spawnX = GOAL_DIST + 9999;
+      window.__clearTrack();
       return player.x + 900;
     };
   });
@@ -137,7 +142,7 @@ async function main() {
     }
     return { early, first };
   });
-  const need = { bugChain: 0.15, highLow: 0.15, planeThen: 0.35, bobaPit: 0.35, doublePit: 0.65 };
+  const need = { bugChain: 0.15, highLow: 0.15, planeThen: 0.35, bobaPit: 0.35, doublePit: 0.65, wideGlide: 0.65 };
   check('套路段按阶段解锁', unlock.early === 0 && Object.keys(need).every((id) => unlock.first[id] !== undefined && unlock.first[id] >= need[id] - 1e-9),
     JSON.stringify(unlock.first));
 
@@ -187,6 +192,74 @@ async function main() {
     return { wins, deaths };
   });
   check('演示 AI 全程 30 局通关率 ≥ 28/30', fullRuns.wins >= 28, `${fullRuns.wins}/30 ${JSON.stringify(fullRuns.deaths)}`);
+
+  // ---- 1b2. 长音滑翔：空中持续喊滞空更久；宽坑可过 / 不滑翔必掉 ----
+  const glide = await page.evaluate(() => {
+    // fullRuns 结束后 dist 在终点、winInfo 为真；不复位的话 step 会立刻再 winRun 然后冻住
+    deadInfo = null; winInfo = false; mode = 'play'; countdown = 0;
+    dist = 0.7 * GOAL_DIST; camX = dist; player.x = PLAYER_X + dist;
+    const airFrames = (hold) => {
+      window.__clearTrack();
+      deadInfo = null; winInfo = false;
+      player.y = GROUND; player.vy = 0; player.grounded = true; shoutT = 0; gliding = false;
+      player.vy = -JUMP_V_MAX; player.grounded = false;
+      let frames = 0, leftGround = false;
+      for (let i = 0; i < 400; i++) {
+        if (hold) { shoutVol = Math.max(voice.fullVol, voice.Tjump + 0.05); shoutT = 1; }
+        else shoutT = 0;
+        step(1 / 60);
+        frames++;
+        if (!player.grounded) leftGround = true;
+        else if (leftGround) break;
+      }
+      return frames;
+    };
+    const withG = airFrames(true), noG = airFrames(false);
+
+    // 宽坑：演示 AI（含滑翔）20 次
+    let pass = 0;
+    for (let k = 0; k < 20; k++) {
+      window.__seed(500 + k);
+      const x0 = window.__placeAt(0.7);
+      const end = PATTERNS.find((p) => p.id === 'wideGlide').build(x0);
+      // 启用 DEMO 音量路径：临时走 demoVol（placeAt 后 DEMO 仍为 URL 决定；用 slack 模拟持续滑翔不够）
+      // 直接驱动：满力起跳 + 空中保持喊声
+      for (let i = 0; i < 900 && !deadInfo && player.x < end + 200; i++) {
+        const pit = obstacles.find((o) => o.type === 'pit');
+        if (player.grounded && pit && pit.x - player.x < 100 && pit.x - player.x > 0) {
+          shoutVol = voice.fullVol; shoutT = 0.5; // 起跳
+        } else if (!player.grounded && pit && player.x < pit.x + pit.w) {
+          shoutVol = voice.fullVol; shoutT = 1; // 滑翔
+        }
+        step(1 / 60);
+      }
+      if (!deadInfo) pass++;
+    }
+
+    // 反例：关掉演示 AI，贴沿满力起跳且空中不喊 → 掉坑
+    window.__muteDemo = true;
+    let falls = 0;
+    for (let k = 0; k < 10; k++) {
+      window.__seed(600 + k);
+      const x0 = window.__placeAt(0.7);
+      PATTERNS.find((p) => p.id === 'wideGlide').build(x0);
+      let jumped = false;
+      for (let i = 0; i < 500 && !deadInfo; i++) {
+        const pit = obstacles.find((o) => o.type === 'pit');
+        if (!jumped && player.grounded && pit && pit.x - player.x < 50 && pit.x - player.x > 0) {
+          shoutVol = voice.fullVol; shoutT = 0.12; jumped = true;
+        } else {
+          shoutT = 0;
+        }
+        step(1 / 60);
+      }
+      if (deadInfo && (deadInfo.type === 'pit' || deathKey(deadInfo) === 'pit')) falls++;
+    }
+    window.__muteDemo = false;
+    return { withG, noG, pass, falls };
+  });
+  check('空中长音滑翔滞空更久', glide.withG > glide.noG + 8, `滑翔=${glide.withG}帧 静音=${glide.noG}帧`);
+  check('宽坑滑翔可过 / 不滑翔必掉', glide.pass === 20 && glide.falls === 10, JSON.stringify(glide));
 
   // ---- 1c. 阶段：边界划分、整局依次切换并弹横幅、天色随阶段渐变 ----
   const stages = await page.evaluate(() => {

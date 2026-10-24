@@ -88,6 +88,13 @@ const PATTERNS = [
       return pushPit(end + rand(300, 330), rand(110, 125));
     },
   },
+  {
+    id: 'wideGlide', name: '宽坑滑翔', stage: 3, len: 400,
+    build(x) {
+      // 360–380px：满力跳+前冲约 390px，贴沿起跳不滑翔会掉；下落段滑翔可过
+      return pushPit(x, rand(360, 380));
+    },
+  },
 ];
 
 function pickPattern(prog) {
