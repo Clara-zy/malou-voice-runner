@@ -2,7 +2,7 @@
 
 /* Service Worker：预缓存全部静态资源，断网也能完整游玩（摆摊/现场兜底）
  * 注意：改动任何静态资源时把 CACHE 版本号 +1，否则老设备拿不到新版本。 */
-const CACHE = 'malou-v7';
+const CACHE = 'malou-v10';
 const ASSETS = [
   './',
   'index.html',
@@ -29,7 +29,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  // HTML 导航 network-first：改版立即生效（断网回落缓存）；其余资源 cache-first，靠 ?v= 版本号更新
+  // HTML 导航 network-first：改版立即生效（断网回落缓存）；其余资源按完整 URL（含 ?v=）cache-first
   if (e.request.mode === 'navigate') {
     e.respondWith(
       fetch(e.request)
@@ -41,17 +41,18 @@ self.addEventListener('fetch', (e) => {
     );
     return;
   }
+  // 不能 ignoreSearch 命中：旧缓存里的 game.js 会冒充 game.js?v=新版，改版后首开跑旧代码
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((hit) => {
+    caches.match(e.request).then((hit) => {
       if (hit) return hit;
       return fetch(e.request).then((res) => {
-        // 同源静态资源运行时也进缓存（?demo 之类的变体 URL 靠 ignoreSearch 命中）
         if (res.ok && new URL(e.request.url).origin === location.origin) {
           const clone = res.clone();
           caches.open(CACHE).then((c) => c.put(e.request, clone));
         }
         return res;
-      }).catch(() => caches.match('./', { ignoreSearch: true }));
+      }).catch(() => caches.match(e.request, { ignoreSearch: true })
+        .then((old) => old || caches.match('./', { ignoreSearch: true })));
     })
   );
 });

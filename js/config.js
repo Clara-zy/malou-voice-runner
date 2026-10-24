@@ -26,9 +26,9 @@ const STAGES = [
     sky: ['#1d3d6e', '#3a6ea5', '#79a9d1'], lit: 0.05, orb: { e: '☀️', y: 150 } },
   { from: 0.35, icon: '📝', time: '15:00', name: '需求又变了', tip: '纸飞机出没：先闭嘴，飞过去再喊', patternChance: 0.4,
     sky: ['#2a2f5e', '#7a4b78', '#d07a5a'], lit: 0.2, orb: { e: '☀️', y: 250 } },
-  { from: 0.65, icon: '🌙', time: '22:00', name: '深夜加班',   tip: '技术债连环坑：落地马上再喊',     patternChance: 0.5,
+  { from: 0.65, icon: '🌙', time: '22:00', name: '深夜加班',   tip: '宽坑要空中持续喊——滑翔过去',   patternChance: 0.5,
     sky: ['#0d1631', '#22345f', '#3a517f'], lit: 0.32, orb: { e: '🌙', y: 170 } },
-  { from: 0.92, icon: '🚀', time: '02:00', name: '凌晨上线',   tip: '冲刺！上线就在眼前',             patternChance: 0.5,
+  { from: 0.92, icon: '🚀', time: '02:00', name: '凌晨上线',   tip: '👔 产品经理拦路：发疯撞破！',     patternChance: 0,
     sky: ['#05060f', '#1a1240', '#3b2466'], lit: 0.55, orb: { e: '🌙', y: 150 } },
 ];
 const STAGE_BLEND = 0.03;    // 阶段交界前这段进度内天色渐变过渡
@@ -48,8 +48,15 @@ const SCORE = {
   CAP: 9999,
 };
 
-/* 道具：咖啡低空小跳可得，奶茶高空要满力喊 */
-const PICK = { CHANCE: 0.34, BOBA_CHANCE: 0.3, COFFEE_PTS: 20, BOBA_PTS: 50 };
+/* 道具：咖啡低空小跳可得，奶茶高空要满力喊；香蕉中空，集 3 根摸鱼 */
+const PICK = {
+  CHANCE: 0.34, BOBA_CHANCE: 0.3, BANANA_CHANCE: 0.22,
+  COFFEE_PTS: 20, BOBA_PTS: 50, BANANA_PTS: 15,
+  COFFEE_MAD: 25,          // 咖啡回充发疯值
+  SHIELD_MAX: 1,           // 奶茶护盾层数上限
+  BANANA_NEED: 3,          // 摸鱼所需香蕉数
+  SLACK_T: 4,              // 摸鱼时长（秒）
+};
 
 /* 发疯值：喊=充电 安静=衰减；纸飞机靠近时冻结（闭嘴区规则） */
 const MAD = {
@@ -57,6 +64,23 @@ const MAD = {
   FREEZE_DIST: 320,
   BERSERK_T: 5, COOLDOWN: 3,
   SPEED_MUL: 1.3, SCORE_MUL: 2,
+};
+
+/* 长音滑翔：空中音量过起跳线时减缓下落 */
+const GLIDE = { GRAVITY_MUL: 0.45, MIN_AIR: 20 };
+
+/* 终点 Boss：进入凌晨上线阶段后，产品经理拦路扔需求 */
+const BOSS = {
+  FROM: 0.92,           // 与 STAGES[4] 对齐
+  AHEAD: 860,           // 出场位置 = 镜头左缘 + AHEAD；不能按终点反推，否则短赛程 Boss 落在吗喽身后
+  GAP: 300,             // 软门：非发疯时吗喽停在 Boss 前这么远，给爬过来的 Bug 留反应时间
+  TIMEOUT: 8,           // 秒；超时撤兵，避免卡死
+  THROW_MIN: 1.5, THROW_MAX: 1.9,
+  BUG_CHANCE: 0.45,     // 否则扔纸飞机
+  BUG_V: 220,           // 扔出的 Bug 从 Boss 脚下爬向吗喽的速度
+  PLANE_V: 240,         // Boss 甩出的纸飞机更快：慢飞机会长时间压住闭嘴区，发疯值根本充不起来
+  PTS: 100,
+  W: 110, H: 150,
 };
 
 /* URL 参数：?demo 自动演示模式；?goal=3000 缩短赛程（默认 12000px = 1000 行代码） */

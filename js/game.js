@@ -25,6 +25,12 @@ let madness = 0, berserkT = 0, madCd = 0, madFrozen = false, madFlash = 0, madCo
 let stageIdx = 0, stageBanner = 0;
 /* 道具与粒子 */
 let pickups = [], particles = [], floaties = [];
+/* 护盾 / 香蕉摸鱼 */
+let shield = 0, shieldBlocks = 0;
+let bananas = 0, slackT = 0, slackCount = 0;
+let gliding = false, glideHint = false; // 空中长音滑翔；本局是否已提示过
+/* Boss：null | { x, age, throwCd, state:'live'|'beaten'|'fled' } */
+let boss = null, bossResult = null; // bossResult: 'beaten' | 'fled' | null
 
 const curScore = () => Math.min(SCORE.CAP, Math.floor(lineBase) + bonusPts);
 
@@ -168,15 +174,31 @@ function demoVol(dt) {
   demoPulse = Math.max(0, demoPulse - dt);
   if (demoPulse > 0) return 0.3;
   const n = nearestHazard();
+  // 空中过宽坑：持续喊声滑翔，直到越过坑沿
+  if (!player.grounded) {
+    for (const o of obstacles) {
+      if (o.type === 'pit' && o.w >= 200 && player.x > o.x - 40 && player.x < o.x + o.w + 20) return 0.3;
+    }
+  }
   if (n && player.grounded) {
     if (n.o.type === 'paper') return 0;                            // 纸飞机：闭嘴
-    // 触发距离按当前速度等比缩放：提速后提前量也要加大
-    const sc = speed / AUTO_V_START;
+    // 触发距离按相对接近速度等比缩放：提速后提前量加大；卡在 Boss 门口时只剩爬虫自己的速度
+    const gated = boss && boss.state === 'live' && berserkT <= 0 && dist >= boss.x - bossGateOff() - 1;
+    const sc = ((gated ? 0 : speed) + (n.o.crawl || 0)) / AUTO_V_START;
     const trig = (n.o.type === 'bug' ? 80 : n.o.type === 'blocker' ? 100 : 30) * sc;
     if (n.nd <= trig) { demoPulse = 0.09; return 0.3; }            // 喊一嗓子
   }
+  // Boss 门口：没飞机、没爬虫时持续喊充发疯值（空中也喊，否则只有落地那一帧在充），攒够了撞破
+  if (boss && boss.state === 'live') {
+    const planeNear = planeLooming();
+    // 爬虫出场即停喊：滑翔落地要近 1s，晚停会正好落在爬虫身上
+    const bugComing = obstacles.some((o) => o.crawl && o.x + o.w > player.x - PLAYER_W / 2 && o.x - player.x < 300);
+    if (!planeNear && !bugComing) return 0.3;
+  }
   return 0;                                                         // 平时安静
 }
+/* 摸鱼时间：复用演示 AI 的起跳判断（不依赖 DEMO 开关） */
+function slackVol(dt) { return demoVol(dt); }
 
 /* ================= 流程 ================= */
 function resetRun() {
@@ -193,6 +215,9 @@ function resetRun() {
   lineBase = 0; bonusPts = 0; combo = 0; maxCombo = 0;
   madness = 0; berserkT = 0; madCd = 0; madFrozen = false; madFlash = 0; madCount = 0; sprintDone = false;
   stageIdx = 0; stageBanner = 0;
+  shield = 0; shieldBlocks = 0; bananas = 0; slackT = 0; slackCount = 0;
+  gliding = false; glideHint = false;
+  boss = null; bossResult = null;
   pendingScore = 0; saved = false;
   mode = 'play';
   Music.start();
@@ -222,6 +247,82 @@ function die(o) {
   setTimeout(showOver, 800);
 }
 
+/* 闭嘴区：前方 FREEZE_DIST 内有还没飞过头顶的纸飞机；飞过去的不算，否则慢速飞机会冻结发疯值好几秒 */
+function planeLooming() {
+  return obstacles.some((o) => o.type === 'paper' && o.x + o.w > player.x - PLAYER_W / 2 &&
+    o.x + o.w / 2 - player.x < MAD.FREEZE_DIST);
+}
+
+/* Boss 软门：dist 不得超过 boss.x - bossGateOff()（吗喽右缘停在 Boss 前 BOSS.GAP） */
+function bossGateOff() { return BOSS.GAP + PLAYER_X + PLAYER_W / 2; }
+
+/* Bug 爬到脚下时若纸飞机正压在头顶，跳撞飞机、不跳撞 Bug，必死；这种时机改扔飞机 */
+function bossBugSafe(bugX) {
+  const tb = (bugX - player.x) / BOSS.BUG_V;
+  return !obstacles.some((o) => {
+    if (o.type !== 'paper') return false;
+    const v = o.v || PLANE_V;
+    const t0 = (o.x - player.x - 60) / v, t1 = (o.x - player.x + 140) / v;
+    return t1 > tb - 0.5 && t0 < tb + 0.7;
+  });
+}
+
+/* Boss 下场：前方扔出物一并清空，直接冲线 */
+function clearBossThrows() {
+  obstacles = obstacles.filter((o) => o.x + (o.w || 0) < player.x - PLAYER_W / 2);
+}
+
+/* 护盾挡一次致死：消耗护盾并化解危险，返回 true 表示已挡住 */
+function absorbHit(o) {
+  if (shield <= 0 || deadInfo || winInfo) return false;
+  shield = 0;
+  shieldBlocks++;
+  shake = Math.max(shake, 0.3);
+  spawnBurst(player.x, player.y - 40, ['#7ec8ff', '#ffffff', '#a8e0ff'], 16, 280);
+  textPop(player.x, player.y - 150, '🛡️ TODO 挡住了!', '#7ec8ff', 24);
+  SFX.shield();
+  navigator.vibrate && navigator.vibrate(40);
+  if (o && o.type === 'pit') {
+    // 从坑底弹回地面，并跳过当前坑（推到坑外沿）
+    player.y = GROUND; player.vy = 0; player.grounded = true;
+    if (player.x < o.x + o.w) {
+      const push = o.x + o.w + 8 - player.x;
+      dist += push; camX = dist; player.x = PLAYER_X + dist;
+    }
+  } else if (o) {
+    o.dead = true;
+  }
+  return true;
+}
+
+function collectPickup(p) {
+  p.taken = true;
+  if (p.type === 'coffee') {
+    bonusPts += PICK.COFFEE_PTS;
+    madness = Math.min(100, madness + PICK.COFFEE_MAD);
+    textPop(p.x, p.y - 24, `+${PICK.COFFEE_PTS}行 · 😤+${PICK.COFFEE_MAD}`, '#ffd34d');
+  } else if (p.type === 'boba') {
+    bonusPts += PICK.BOBA_PTS;
+    const got = shield < PICK.SHIELD_MAX;
+    if (got) shield = PICK.SHIELD_MAX;
+    textPop(p.x, p.y - 24, got ? `+${PICK.BOBA_PTS}行 · 🛡️护盾` : `+${PICK.BOBA_PTS}行`, '#ff9ad5');
+  } else if (p.type === 'banana') {
+    bonusPts += PICK.BANANA_PTS;
+    bananas++;
+    if (bananas >= PICK.BANANA_NEED) {
+      bananas = 0;
+      slackT = PICK.SLACK_T;
+      slackCount++;
+      textPop(p.x, p.y - 40, '😴 摸鱼时间!!', '#ffe08a', 26);
+      SFX.slack();
+    } else {
+      textPop(p.x, p.y - 24, `+${PICK.BANANA_PTS}行 · 🍌${bananas}/${PICK.BANANA_NEED}`, '#ffe08a');
+    }
+  }
+  spawnBurst(p.x, p.y, ['#ffd34d', '#fff1b8'], 10, 200, 500);
+  SFX.pickup();
+}
+
 function winRun() {
   if (deadInfo || winInfo) return;
   winInfo = true;
@@ -236,7 +337,8 @@ const DEATHS = {
   '404': ['🚧', '此路不通', '404 Not Found：需求文档里的这条路，现实中不存在。', '小技巧：提前一点喊，跳得更高更远。'],
   'P0 故障': ['💣', '本迭代结束', 'P0 告警：全群都在 @你，包括老板。', '小技巧：提前一点喊，跳得更高更远。'],
   '需求变更变更': ['✈️', '低空遇袭', '纸飞机（第 N 版需求变更）从头顶飞过——谁让你在它下面乱喊的？', '小技巧：看到纸飞机就闭嘴快走，千万别跳。'],
-  'pit': ['🕳️', '掉进技术债', '这个坑是三年前的前人埋的，今天正好轮到吗喽来填。', '小技巧：坑越宽越要喊得响，起跳别太早。'],
+  '产品经理': ['👔', '需求当场拍板', '产品经理说：这个很简单，你怎么还没做完？吗喽当场社死。', '小技巧：攒满发疯值再撞上去，一拳捶爆！'],
+  'pit': ['🕳️', '掉进技术债', '这个坑是三年前的前人埋的，今天正好轮到吗喽来填。', '小技巧：坑越宽越要喊得响；空中持续喊可以滑翔。'],
 };
 function deathKey(o) {
   if (!o || o.type === 'pit') return 'pit';
@@ -297,7 +399,11 @@ function step(dt) {
   surge = Math.max(0, surge - SURGE_DECAY * dt);
 
   // —— 音量管线：麦克风音量（走抓峰）与合成喊声包络（自带力度）分开算 ——
-  const micVol = DEMO ? demoVol(dt) : (voice.active ? voice.update() : 0);
+  // 摸鱼时间用演示 AI 自动跳，仍可被玩家手动喊声覆盖
+  slackT = Math.max(0, slackT - dt);
+  // window.__muteDemo：测试用，强制关掉演示 AI 音量（验证「不滑翔必掉」）
+  const autoVol = (DEMO && !window.__muteDemo) ? demoVol(dt) : (slackT > 0 ? slackVol(dt) : 0);
+  const micVol = Math.max(autoVol, voice.active && !DEMO ? voice.update() : 0);
   const synthVol = shoutT > 0 ? shoutVol * clamp(shoutT / 0.2, 0, 1) : 0;
 
   // 抓峰：过阈值不立刻跳，短窗跟踪这口气的峰值，按峰值算力度。
@@ -332,7 +438,7 @@ function step(dt) {
   pendingVol = 0; // 抓峰产出只作用于这一帧
 
   // ===== 发疯值：喊=充电，安静=衰减，纸飞机靠近=冻结（闭嘴区规则） =====
-  madFrozen = obstacles.some((o) => o.type === 'paper' && Math.abs(o.x + o.w / 2 - player.x) < MAD.FREEZE_DIST);
+  madFrozen = planeLooming();
   if (madCd > 0) madCd -= dt;
   if (berserkT > 0) {
     berserkT -= dt;
@@ -364,10 +470,51 @@ function step(dt) {
     stageBanner = STAGE_BANNER_T;
     SFX.stage();
   }
+  // ===== Boss 战：进入凌晨上线阶段后生成产品经理 =====
+  if (!boss && prog >= BOSS.FROM && !winInfo) {
+    // 软门必须落在终点前，否则短赛程会先冲线、Boss 形同虚设
+    const x = Math.min(dist + BOSS.AHEAD, GOAL_DIST - 40 + bossGateOff());
+    boss = { x, age: 0, throwCd: 0.8, state: 'live', iframes: 0 };
+    textPop(player.x, GROUND - 320, '👔 产品经理来了!', '#ff9a3d', 28);
+    spawnX = GOAL_DIST + 9999; // 停掉散件/套路生成
+    // 清掉镜头前所有旧障碍，避免宽坑卡在 Boss 门前（Boss 自己会扔飞机/Bug）
+    obstacles = [];
+    pickups = [];
+  }
+  if (boss && boss.state === 'live') {
+    boss.age += dt;
+    boss.iframes = Math.max(0, (boss.iframes || 0) - dt);
+    // 发疯冲锋时 Boss 吓得停手：相向接近速度 700+px/s，近身甩飞机躲不开
+    if (berserkT <= 0) boss.throwCd -= dt;
+    if (boss.throwCd <= 0) {
+      boss.throwCd = BOSS.THROW_MIN + Math.random() * (BOSS.THROW_MAX - BOSS.THROW_MIN);
+      const bugX = boss.x - 40;
+      if (Math.random() < BOSS.BUG_CHANCE && bossBugSafe(bugX)) {
+        pushBug(bugX);
+        obstacles[obstacles.length - 1].crawl = BOSS.BUG_V;
+      } else {
+        obstacles.push({ type: 'paper', x: boss.x - 40, w: 84, h: 64, top: 392 + Math.random() * 26, e: '✈️',
+          label: '需求变更变更', color: '#b8860b', v: BOSS.PLANE_V });
+      }
+    }
+    if (boss.age >= BOSS.TIMEOUT) {
+      boss.state = 'fled';
+      bossResult = 'fled';
+      textPop(player.x, GROUND - 300, '👔 产品经理撤了…勉强上线', '#cdd8ff', 24);
+      clearBossThrows();
+    }
+  }
   Music.rate = 1 + 0.15 * clamp(prog, 0, 1) + (berserkT > 0 ? 0.25 : 0) + (sprintDone ? 0.1 : 0);
 
-  // ===== 竖直物理 =====
-  player.vy += GRAVITY * dt;
+  // ===== 竖直物理（空中持续喊 → 长音滑翔，重力降低） =====
+  const airH = GROUND - player.y;
+  // 只在下落段滑翔：上升段减重力会把跳高抬到离谱，破坏「喊得越响跳得越高」的手感
+  gliding = !player.grounded && player.vy > 0 && airH >= GLIDE.MIN_AIR && vol >= voice.Tjump && countdown <= 0;
+  if (gliding && !glideHint) {
+    glideHint = true;
+    textPop(player.x, player.y - 120, '🎙️ 滑翔中', '#a8d4ff', 22);
+  }
+  player.vy += GRAVITY * (gliding ? GLIDE.GRAVITY_MUL : 1) * dt;
   player.y += player.vy * dt;
   const overPit = isOverPit();
   if (!overPit && player.y >= GROUND && player.vy >= 0) {
@@ -381,12 +528,36 @@ function step(dt) {
   } else {
     player.grounded = false;
   }
-  if (player.y - PLAYER_H > H + 80) { die({ type: 'pit' }); return; }
+  if (player.y - PLAYER_H > H + 80) {
+    const pit = obstacles.find((o) => o.type === 'pit' && player.x > o.x && player.x < o.x + o.w) || { type: 'pit' };
+    if (absorbHit(pit)) { /* 护盾把吗喽捞回来 */ }
+    else { die(pit); return; }
+  }
 
-  // ===== 障碍推进 + 碰撞（发疯状态可捶爆地面障碍，纸飞机/深坑依然致命） =====
-  fillObstacles();
+  // ===== Boss 碰撞：发疯撞破；护盾可挡一次接触；否则被需求砸死 =====
+  // Boss 本体：发疯撞破；否则当软门挡住（不秒杀，飞机/Bug 才是真正威胁）
+  if (boss && boss.state === 'live') {
+    const gate = boss.x - bossGateOff();
+    if (berserkT > 0 && player.x + PLAYER_W / 2 > boss.x + 8) {
+      boss.state = 'beaten';
+      bossResult = 'beaten';
+      bonusPts += BOSS.PTS;
+      spawnBurst(boss.x + BOSS.W / 2, GROUND - BOSS.H / 2, ['#ff6b6b', '#ffb020', '#ffffff'], 28, 380);
+      textPop(boss.x, GROUND - BOSS.H - 40, `👊 捶爆产品经理! +${BOSS.PTS}`, '#ff9a3d', 26);
+      shake = Math.max(shake, 0.45);
+      SFX.destroy();
+      SFX.mad();
+      clearBossThrows();
+    } else if (berserkT <= 0 && dist > gate) {
+      dist = gate; camX = dist; player.x = PLAYER_X + dist;
+    }
+  }
+
+  // ===== 障碍推进 + 碰撞（发疯捶爆优先；否则护盾挡一次；再否则死亡） =====
+  if (!boss || boss.state !== 'live') fillObstacles();
   for (const o of obstacles) {
-    if (o.type === 'paper') o.x -= PLANE_V * dt;
+    if (o.type === 'paper') o.x -= (o.v || PLANE_V) * dt;
+    if (o.crawl) o.x -= o.crawl * dt;
     if (o.dead || o.type === 'pit') continue;
     if (aabb(playerBox(10), obBox(o, 8))) {
       if (berserkT > 0 && o.type !== 'paper') {
@@ -396,6 +567,8 @@ function step(dt) {
         textPop(o.x, GROUND - o.h - 40, `👊 捶爆! +${SCORE.DESTROY}`, '#ff9a3d', 22);
         shake = Math.max(shake, 0.25);
         SFX.destroy();
+      } else if (absorbHit(o)) {
+        /* 护盾挡住 */
       } else { die(o); return; }
     }
   }
@@ -411,14 +584,7 @@ function step(dt) {
 
   // ===== 道具收集 =====
   for (const p of pickups) {
-    if (!p.taken && aabb(playerBox(4), { x: p.x - 22, y: p.y - 22, w: 44, h: 44 })) {
-      p.taken = true;
-      const pts = p.type === 'boba' ? PICK.BOBA_PTS : PICK.COFFEE_PTS;
-      bonusPts += pts;
-      spawnBurst(p.x, p.y, ['#ffd34d', '#fff1b8'], 10, 200, 500);
-      textPop(p.x, p.y - 24, `+${pts}行`, '#ffd34d');
-      SFX.pickup();
-    }
+    if (!p.taken && aabb(playerBox(4), { x: p.x - 22, y: p.y - 22, w: 44, h: 44 })) collectPickup(p);
   }
   pickups = pickups.filter((p) => !p.taken && p.x > camX - 200);
 

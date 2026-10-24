@@ -20,6 +20,7 @@ function draw() {
   drawGround();
   drawObstacles();
   drawPickups();
+  drawBoss();
   drawGoal();
   drawPlayer();
   drawParticles();
@@ -169,7 +170,8 @@ function drawPickups() {
     const y = p.y + Math.sin(tNow * 3 + p.x * 0.02) * 6;
     // 光晕
     const g = ctx.createRadialGradient(sx, y, 4, sx, y, 30);
-    g.addColorStop(0, p.type === 'boba' ? 'rgba(255,170,220,.35)' : 'rgba(255,211,77,.35)');
+    const glow = p.type === 'boba' ? 'rgba(255,170,220,.35)' : p.type === 'banana' ? 'rgba(255,224,138,.35)' : 'rgba(255,211,77,.35)';
+    g.addColorStop(0, glow);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -178,7 +180,7 @@ function drawPickups() {
     ctx.font = '34px ' + EMOJI_FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(p.type === 'boba' ? '🧋' : '☕', sx, y);
+    ctx.fillText(p.type === 'boba' ? '🧋' : p.type === 'banana' ? '🍌' : '☕', sx, y);
   }
 }
 
@@ -245,6 +247,39 @@ function drawMadFlash() {
   ctx.globalAlpha = 1;
 }
 
+function drawBoss() {
+  if (!boss || boss.state === 'fled') return;
+  if (boss.state === 'beaten') return;
+  const sx = boss.x - camX;
+  if (sx > W + 80 || sx + BOSS.W < -80) return;
+  const y = GROUND - BOSS.H;
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath();
+  ctx.ellipse(sx + BOSS.W / 2, GROUND + 8, BOSS.W * 0.45, 8, 0, 0, 7);
+  ctx.fill();
+  rr(sx, y, BOSS.W, BOSS.H, 14);
+  ctx.fillStyle = '#5a3d7a';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffd34d';
+  ctx.stroke();
+  ctx.font = '52px ' + EMOJI_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('👔', sx + BOSS.W / 2, y + BOSS.H / 2 - 8);
+  ctx.font = '700 15px system-ui';
+  ctx.fillStyle = '#ffe9a8';
+  ctx.fillText('产品经理', sx + BOSS.W / 2, y - 14);
+  // 超时进度条
+  const tw = BOSS.W - 16, th = 6;
+  ctx.fillStyle = 'rgba(0,0,0,.45)';
+  rr(sx + 8, y + BOSS.H - 18, tw, th, 3);
+  ctx.fill();
+  ctx.fillStyle = '#ff9a3d';
+  rr(sx + 8, y + BOSS.H - 18, tw * clamp(1 - boss.age / BOSS.TIMEOUT, 0, 1), th, 3);
+  ctx.fill();
+}
+
 function drawGoal() {
   const sx = GOAL_DIST - camX;
   if (sx < -100 || sx > W + 200) return;
@@ -287,6 +322,19 @@ function drawPlayer() {
       ctx.stroke();
     }
   }
+  // 滑翔音浪线
+  if (gliding && !deadInfo) {
+    ctx.strokeStyle = 'rgba(168,212,255,.55)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const ly = player.y - 70 + i * 18;
+      const wave = Math.sin(tNow * 14 + i) * 6;
+      ctx.beginPath();
+      ctx.moveTo(sx - 40, ly + wave);
+      ctx.quadraticCurveTo(sx - 70, ly - wave, sx - 100 - i * 8, ly + wave * 0.5);
+      ctx.stroke();
+    }
+  }
 
   if (berserkT > 0 && !deadInfo) {
     // 发疯光环
@@ -298,7 +346,14 @@ function drawPlayer() {
   }
 
   const shouting = lastVol > voice.Tjump;
-  const face = deadInfo ? '💀' : winInfo ? '🥳' : berserkT > 0 ? '🤬' : shouting ? '😡' : '🐵';
+  const face = deadInfo ? '💀' : winInfo ? '🥳' : slackT > 0 ? '😴' : berserkT > 0 ? '🤬' : shouting ? '😡' : '🐵';
+  if (shield > 0 && !deadInfo) {
+    ctx.strokeStyle = 'rgba(126,200,255,.7)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(sx, player.y - 38, 48 + Math.sin(tNow * 6) * 2, 0, 7);
+    ctx.stroke();
+  }
   ctx.font = '62px ' + EMOJI_FONT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
@@ -361,7 +416,11 @@ function drawVolMeter(x, y, w, h) {
 
 function drawHUD() {
   hudPill(24, 20, `📋 ${curScore()} 行代码`, 22, '#ffd34d');
-  if (combo >= 2) hudPill(24, 74, `🔥 连躲 x${combo}`, 18, '#ff9a3d');
+  let pillY = 74;
+  if (combo >= 2) { hudPill(24, pillY, `🔥 连躲 x${combo}`, 18, '#ff9a3d'); pillY += 54; }
+  if (shield > 0) { hudPill(24, pillY, `🛡️ 护盾 ×${shield}`, 18, '#7ec8ff'); pillY += 54; }
+  if (bananas > 0 && slackT <= 0) { hudPill(24, pillY, `🍌 ${bananas}/${PICK.BANANA_NEED}`, 18, '#ffe08a'); pillY += 54; }
+  if (slackT > 0) hudPill(24, pillY, `😴 摸鱼 ${slackT.toFixed(1)}s`, 18, '#ffe08a');
 
   const px = 330, pw = 440, py = 32, ph = 16;
   ctx.fillStyle = 'rgba(10,16,34,.75)';
