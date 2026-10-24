@@ -13,9 +13,9 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 let html = readFileSync(join(root, 'index.html'), 'utf8');
 
-// 内联样式
+// 内联样式（兼容 ?v= 版本号）
 html = html.replace(
-  '<link rel="stylesheet" href="style.css">',
+  /<link rel="stylesheet" href="style\.css[^"]*">/,
   () => '<style>\n' + readFileSync(join(root, 'style.css'), 'utf8') + '</style>'
 );
 

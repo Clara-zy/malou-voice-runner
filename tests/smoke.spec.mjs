@@ -101,6 +101,122 @@ async function main() {
   check('demo 全程无 JS 错误', !errs.length && !(win && win.errs && win.errs.length), errs.join('; '));
   await page.waitForTimeout(4300); // 等 demo 自动重开
 
+  // ---- 1b. 套路段（同步调用 step 快速模拟，固定随机种子，不依赖真实时间） ----
+  await page.goto(BASE + '/?demo&nolinx');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    window.__seed = (seed) => {
+      let s = (seed * 2654435761) >>> 0;
+      Math.random = () => {
+        s = (s + 0x6D2B79F5) >>> 0;
+        let t = Math.imul(s ^ (s >>> 15), s | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    };
+    // 把吗喽放到指定进度、清空赛道，返回可放置套路段的起点
+    window.__placeAt = (prog) => {
+      resetRun(); countdown = 0;
+      dist = prog * GOAL_DIST; camX = dist; player.x = PLAYER_X + dist; speed = speedFor();
+      obstacles.length = 0; pickups.length = 0; spawnX = GOAL_DIST + 9999;
+      return player.x + 900;
+    };
+  });
+
+  const unlock = await page.evaluate(() => {
+    window.__seed(7);
+    const first = {};
+    let early = 0;
+    for (let p = 0; p < 1; p += 0.01) {
+      for (let k = 0; k < 200; k++) {
+        const pat = pickPattern(p);
+        if (!pat) continue;
+        if (p < STAGES[1].from) early++;
+        if (first[pat.id] === undefined) first[pat.id] = +p.toFixed(2);
+      }
+    }
+    return { early, first };
+  });
+  const need = { bugChain: 0.15, highLow: 0.15, planeThen: 0.35, bobaPit: 0.35, doublePit: 0.65 };
+  check('套路段按阶段解锁', unlock.early === 0 && Object.keys(need).every((id) => unlock.first[id] !== undefined && unlock.first[id] >= need[id] - 1e-9),
+    JSON.stringify(unlock.first));
+
+  const patRuns = await page.evaluate(() => {
+    const out = {};
+    for (const pat of PATTERNS) {
+      let pass = 0;
+      for (let k = 0; k < 20; k++) {
+        window.__seed(100 + k);
+        const x0 = window.__placeAt(Math.min(STAGES[pat.stage].from + 0.02 + k * 0.025, 0.9));
+        const end = pat.build(x0);
+        for (let i = 0; i < 900 && !deadInfo && player.x < end + 200; i++) step(1 / 60);
+        if (!deadInfo) pass++;
+      }
+      out[pat.id] = pass;
+    }
+    return out;
+  });
+  check('每种套路段演示 AI 各 20 次全部通过', Object.values(patRuns).every((n) => n === 20), JSON.stringify(patRuns));
+
+  const planeTrap = await page.evaluate(() => {
+    const pat = PATTERNS.find((p) => p.id === 'planeThen');
+    const labels = [];
+    for (let k = 0; k < 10; k++) {
+      window.__seed(300 + k);
+      pat.build(window.__placeAt(0.4 + k * 0.05));
+      const plane = obstacles.find((o) => o.type === 'paper');
+      for (let i = 0; i < 900 && plane.x + plane.w / 2 - player.x > 110; i++) step(1 / 60);
+      keyJump = true; // 纸飞机即将飞到头顶时满力起跳
+      for (let i = 0; i < 120 && !deadInfo; i++) step(1 / 60);
+      labels.push(deadInfo ? deadInfo.label : 'alive');
+    }
+    return labels;
+  });
+  check('闭嘴后起跳：纸飞机在头顶时起跳必死', planeTrap.every((l) => l === '需求变更变更'), planeTrap.join(','));
+
+  const fullRuns = await page.evaluate(() => {
+    const deaths = {};
+    let wins = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      window.__seed(seed);
+      resetRun(); countdown = 0;
+      for (let i = 0; i < 20000 && !deadInfo && !winInfo; i++) step(1 / 60);
+      if (winInfo) wins++;
+      else { const k = deadInfo ? deadInfo.label || deadInfo.type : 'timeout'; deaths[k] = (deaths[k] || 0) + 1; }
+    }
+    return { wins, deaths };
+  });
+  check('演示 AI 全程 30 局通关率 ≥ 28/30', fullRuns.wins >= 28, `${fullRuns.wins}/30 ${JSON.stringify(fullRuns.deaths)}`);
+
+  // ---- 1c. 阶段：边界划分、整局依次切换并弹横幅、天色随阶段渐变 ----
+  const stages = await page.evaluate(() => {
+    const bounds = [0, 0.149, 0.15, 0.5, 0.7, 0.95].map(stageAt).join('');
+    window.__seed(9);
+    obstacles.length = 0;
+    for (let k = 0; k < 300; k++) spawnOne(1000 + k * 2, (k % 15) / 100);
+    const warmup = [...new Set(obstacles.map((o) => o.type))].join(',');
+    window.__seed(42);
+    resetRun(); countdown = 0;
+    const seen = [];
+    let bannerOk = true;
+    for (let i = 0; i < 20000 && !deadInfo && !winInfo; i++) {
+      const before = stageIdx;
+      step(1 / 60);
+      if (stageIdx !== before) {
+        seen.push(stageIdx);
+        if (!(stageBanner > STAGE_BANNER_T - 0.05)) bannerOk = false;
+      }
+    }
+    const sky = (p) => { const m = stageMix(p); return mixHex(m.cur.sky[0], m.next.sky[0], m.t); };
+    const pure2 = sky(0.6), mid = sky(0.635), pure3 = sky(0.7);
+    return { bounds, warmup, seen: seen.join(''), bannerOk, won: winInfo, skies: [sky(0.05), sky(0.2), sky(0.45), pure3, sky(0.95)], pure2, mid, pure3 };
+  });
+  check('阶段边界划分正确', stages.bounds === '001234', stages.bounds);
+  check('通勤阶段热身只出小 Bug', stages.warmup === 'bug', stages.warmup);
+  check('整局依次经过 5 个阶段且每次切换弹横幅', stages.won && stages.seen === '1234' && stages.bannerOk, `seen=${stages.seen} banner=${stages.bannerOk}`);
+  check('天色随阶段不同且交界处渐变', new Set(stages.skies).size === 5 && stages.mid !== stages.pure2 && stages.mid !== stages.pure3,
+    `${stages.pure2} → ${stages.mid} → ${stages.pure3}`);
+
   // ---- 2. 无输入必死（第一个障碍前撞死） ----
   await startKeyboardRun(page);
   const death = await poll(page, () => window.__lastDeath ? { label: window.__lastDeath.label, dist: window.__lastDeath.dist } : null, 8000);
@@ -240,6 +356,23 @@ async function main() {
     return { dead: !!deadInfo, label: deadInfo ? deadInfo.label : null };
   });
   check('狂暴中纸飞机仍致命', plane.dead && plane.label === '需求变更变更');
+
+  // ---- 7a. 结算显示阶段：死亡显示倒在哪个阶段，通关显示熬过全部阶段，口播去掉图标 ----
+  const overStage = async (prog, kill) => {
+    await startKeyboardRun(page);
+    await injectClearTrack(page);
+    await page.evaluate(({ prog, kill }) => {
+      window.__clearTrack();
+      dist = prog * GOAL_DIST; camX = dist; player.x = PLAYER_X + dist;
+      if (kill) setTimeout(() => die({ type: 'bug', label: 'NullPointerException' }), 100);
+    }, { prog, kill });
+    return poll(page, () => (mode === 'over' ? { text: document.getElementById('over-stage').textContent, speech: overSpeech() } : null), 8000, 100);
+  };
+  const deadStage = await overStage(0.72, true);
+  const winStage = await overStage(0.995, false);
+  check('结算显示倒在哪个阶段', !!deadStage && deadStage.text === '🌙 倒在了 22:00 深夜加班 · 上线进度 72%' && deadStage.speech.includes('倒在了 22:00 深夜加班') && !deadStage.speech.includes('🌙'),
+    deadStage ? deadStage.text : '超时');
+  check('通关显示熬过全部阶段', !!winStage && winStage.text.includes('全部 5 个阶段'), winStage ? winStage.text : '超时');
 
   // ---- 7b. 首页：主题标题、无键盘模式入口、空榜不提示、设置面板收纳灵敏度与灵矽 ----
   await page.goto(BASE + '/?nolinx');

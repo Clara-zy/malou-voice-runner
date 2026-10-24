@@ -58,6 +58,7 @@ function showOver() {
     $('over-tip').textContent = tp;
   }
   $('over-score').textContent = `本次成绩：${pendingScore} 行代码${statsStr}`;
+  $('over-stage').textContent = stageSummary();
   try { $('name-input').value = localStorage.getItem(NAME_KEY) || ('吗喽' + (10 + Math.floor(Math.random() * 90))); } catch (e) {}
   saved = false;
   $('btn-save').disabled = false;
@@ -71,10 +72,21 @@ function showOver() {
   if (DEMO) setTimeout(() => { if (mode === 'over') resetRun(); }, 4000);
 }
 
+// 结算的阶段战报：通关显示熬过全部阶段，死亡显示倒在哪个阶段
+function stageSummary(withIcon = true) {
+  if (winInfo) {
+    const first = STAGES[0], last = STAGES[STAGES.length - 1];
+    return `${withIcon ? '🏆 ' : ''}熬过了 ${first.time} 到 ${last.time} 的全部 ${STAGES.length} 个阶段`;
+  }
+  const st = STAGES[stageIdx];
+  const pct = Math.floor(clamp(dist / GOAL_DIST, 0, 1) * 100);
+  return `${withIcon ? st.icon + ' ' : ''}倒在了 ${st.time} ${st.name} · 上线进度 ${pct}%`;
+}
+
 // 读给灵矽的口播稿：和结算页同一套文案，只把不好念的词换成说法
 function overSpeech() {
   const title = $('over-title').textContent;
-  const score = $('over-score').textContent;
+  const score = stageSummary(false) + '。' + $('over-score').textContent;
   const msg = $('over-msg').textContent
     .replace(/NullPointerException/g, '空指针异常')
     .replace(/404/g, '四零四')

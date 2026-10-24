@@ -21,16 +21,20 @@ let pendingScore = 0, saved = false;
 let lineBase = 0, bonusPts = 0, combo = 0, maxCombo = 0;
 /* 发疯值 */
 let madness = 0, berserkT = 0, madCd = 0, madFrozen = false, madFlash = 0, madCount = 0, sprintDone = false;
+/* 阶段：当前所处阶段与切换横幅计时 */
+let stageIdx = 0, stageBanner = 0;
 /* 道具与粒子 */
 let pickups = [], particles = [], floaties = [];
 
 const curScore = () => Math.min(SCORE.CAP, Math.floor(lineBase) + bonusPts);
 
 /* 速度：难度曲线 300→380 + 终点冲刺 + 发疯加成 + 大声跳的前冲 */
+function baseSpeed(prog) {
+  prog = clamp(prog, 0, 1);
+  return AUTO_V_START + (AUTO_V_END - AUTO_V_START) * prog + (prog >= SPRINT_FROM ? SPRINT_BONUS : 0);
+}
 function speedFor() {
-  const prog = clamp(dist / GOAL_DIST, 0, 1);
-  let v = AUTO_V_START + (AUTO_V_END - AUTO_V_START) * prog;
-  if (prog >= SPRINT_FROM) v += SPRINT_BONUS;
+  let v = baseSpeed(dist / GOAL_DIST);
   if (berserkT > 0) v *= MAD.SPEED_MUL;
   return v + surge;
 }
@@ -188,6 +192,7 @@ function resetRun() {
   armT = 0; armPeak = 0; armTotal = 0; pendingVol = 0; surge = 0;
   lineBase = 0; bonusPts = 0; combo = 0; maxCombo = 0;
   madness = 0; berserkT = 0; madCd = 0; madFrozen = false; madFlash = 0; madCount = 0; sprintDone = false;
+  stageIdx = 0; stageBanner = 0;
   pendingScore = 0; saved = false;
   mode = 'play';
   Music.start();
@@ -274,6 +279,7 @@ function step(dt) {
   shake = Math.max(0, shake - dt * 1.4);
   goFlash = Math.max(0, goFlash - dt);
   madFlash = Math.max(0, madFlash - dt);
+  stageBanner = Math.max(0, stageBanner - dt);
   if (deadInfo || winInfo) return; // 定格画面，等结算面板
 
   if (countdown > 0) {
@@ -281,7 +287,7 @@ function step(dt) {
     countdown -= dt;
     const now = Math.ceil(countdown);
     if (now !== prev && now > 0) SFX.tick();
-    if (countdown <= 0) { goFlash = 0.7; SFX.go(); }
+    if (countdown <= 0) { goFlash = 0.7; stageBanner = STAGE_BANNER_T; SFX.go(); }
     return;
   }
 
@@ -351,9 +357,12 @@ function step(dt) {
   camX = dist;
   player.x = PLAYER_X + dist; // 玩家世界坐标前进，屏幕位置保持固定
   const prog = dist / GOAL_DIST;
-  if (!sprintDone && prog >= SPRINT_FROM) {
-    sprintDone = true;
-    textPop(player.x, GROUND - 300, '🚀 上线冲刺!', '#6be08a', 28);
+  if (!sprintDone && prog >= SPRINT_FROM) sprintDone = true;
+  const si = stageAt(prog);
+  if (si !== stageIdx) {
+    stageIdx = si;
+    stageBanner = STAGE_BANNER_T;
+    SFX.stage();
   }
   Music.rate = 1 + 0.15 * clamp(prog, 0, 1) + (berserkT > 0 ? 0.25 : 0) + (sprintDone ? 0.1 : 0);
 
@@ -377,7 +386,7 @@ function step(dt) {
   // ===== 障碍推进 + 碰撞（发疯状态可捶爆地面障碍，纸飞机/深坑依然致命） =====
   fillObstacles();
   for (const o of obstacles) {
-    if (o.type === 'paper') o.x -= 130 * dt;
+    if (o.type === 'paper') o.x -= PLANE_V * dt;
     if (o.dead || o.type === 'pit') continue;
     if (aabb(playerBox(10), obBox(o, 8))) {
       if (berserkT > 0 && o.type !== 'paper') {

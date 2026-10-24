@@ -165,6 +165,7 @@ button.mid:disabled { background: #58c16b; color: #06240e; }
 h2 { font-size: 38px; margin: 2px 0 10px; }
 .over-msg { font-size: 19px; color: #dfe6ff; margin-bottom: 4px; }
 .over-tip { font-size: 15px; color: #9fb0e8; margin-bottom: 8px; }
+.over-stage { font-size: 17px; font-weight: 700; color: #ffd9a0; margin-bottom: 2px; }
 .score-line { font-size: 26px; font-weight: 800; color: #ffd34d; margin: 6px 0 12px; }
 .save-row { display: flex; gap: 10px; justify-content: center; margin-bottom: 4px; }
 #name-input {
