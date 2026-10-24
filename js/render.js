@@ -169,7 +169,8 @@ function drawPickups() {
     const y = p.y + Math.sin(tNow * 3 + p.x * 0.02) * 6;
     // 光晕
     const g = ctx.createRadialGradient(sx, y, 4, sx, y, 30);
-    g.addColorStop(0, p.type === 'boba' ? 'rgba(255,170,220,.35)' : 'rgba(255,211,77,.35)');
+    const glow = p.type === 'boba' ? 'rgba(255,170,220,.35)' : p.type === 'banana' ? 'rgba(255,224,138,.35)' : 'rgba(255,211,77,.35)';
+    g.addColorStop(0, glow);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -178,7 +179,7 @@ function drawPickups() {
     ctx.font = '34px ' + EMOJI_FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(p.type === 'boba' ? '🧋' : '☕', sx, y);
+    ctx.fillText(p.type === 'boba' ? '🧋' : p.type === 'banana' ? '🍌' : '☕', sx, y);
   }
 }
 
@@ -298,7 +299,14 @@ function drawPlayer() {
   }
 
   const shouting = lastVol > voice.Tjump;
-  const face = deadInfo ? '💀' : winInfo ? '🥳' : berserkT > 0 ? '🤬' : shouting ? '😡' : '🐵';
+  const face = deadInfo ? '💀' : winInfo ? '🥳' : slackT > 0 ? '😴' : berserkT > 0 ? '🤬' : shouting ? '😡' : '🐵';
+  if (shield > 0 && !deadInfo) {
+    ctx.strokeStyle = 'rgba(126,200,255,.7)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(sx, player.y - 38, 48 + Math.sin(tNow * 6) * 2, 0, 7);
+    ctx.stroke();
+  }
   ctx.font = '62px ' + EMOJI_FONT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
@@ -361,7 +369,11 @@ function drawVolMeter(x, y, w, h) {
 
 function drawHUD() {
   hudPill(24, 20, `📋 ${curScore()} 行代码`, 22, '#ffd34d');
-  if (combo >= 2) hudPill(24, 74, `🔥 连躲 x${combo}`, 18, '#ff9a3d');
+  let pillY = 74;
+  if (combo >= 2) { hudPill(24, pillY, `🔥 连躲 x${combo}`, 18, '#ff9a3d'); pillY += 54; }
+  if (shield > 0) { hudPill(24, pillY, `🛡️ 护盾 ×${shield}`, 18, '#7ec8ff'); pillY += 54; }
+  if (bananas > 0 && slackT <= 0) { hudPill(24, pillY, `🍌 ${bananas}/${PICK.BANANA_NEED}`, 18, '#ffe08a'); pillY += 54; }
+  if (slackT > 0) hudPill(24, pillY, `😴 摸鱼 ${slackT.toFixed(1)}s`, 18, '#ffe08a');
 
   const px = 330, pw = 440, py = 32, ph = 16;
   ctx.fillStyle = 'rgba(10,16,34,.75)';

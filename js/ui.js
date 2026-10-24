@@ -44,6 +44,8 @@ function showOver() {
   const stats = [];
   if (maxCombo >= 2) stats.push(`最高连躲 x${maxCombo}`);
   if (madCount > 0) stats.push(`发疯 ${madCount} 次`);
+  if (shieldBlocks > 0) stats.push(`护盾挡 ${shieldBlocks} 次`);
+  if (slackCount > 0) stats.push(`摸鱼 ${slackCount} 次`);
   const statsStr = stats.length ? `（${stats.join(' · ')}）` : '';
   if (winInfo) {
     $('over-emoji').textContent = '🎉';

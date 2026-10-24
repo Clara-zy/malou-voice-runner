@@ -25,6 +25,9 @@ let madness = 0, berserkT = 0, madCd = 0, madFrozen = false, madFlash = 0, madCo
 let stageIdx = 0, stageBanner = 0;
 /* 道具与粒子 */
 let pickups = [], particles = [], floaties = [];
+/* 护盾 / 香蕉摸鱼 */
+let shield = 0, shieldBlocks = 0;
+let bananas = 0, slackT = 0, slackCount = 0;
 
 const curScore = () => Math.min(SCORE.CAP, Math.floor(lineBase) + bonusPts);
 
@@ -177,6 +180,8 @@ function demoVol(dt) {
   }
   return 0;                                                         // 平时安静
 }
+/* 摸鱼时间：复用演示 AI 的起跳判断（不依赖 DEMO 开关） */
+function slackVol(dt) { return demoVol(dt); }
 
 /* ================= 流程 ================= */
 function resetRun() {
@@ -193,6 +198,7 @@ function resetRun() {
   lineBase = 0; bonusPts = 0; combo = 0; maxCombo = 0;
   madness = 0; berserkT = 0; madCd = 0; madFrozen = false; madFlash = 0; madCount = 0; sprintDone = false;
   stageIdx = 0; stageBanner = 0;
+  shield = 0; shieldBlocks = 0; bananas = 0; slackT = 0; slackCount = 0;
   pendingScore = 0; saved = false;
   mode = 'play';
   Music.start();
@@ -220,6 +226,57 @@ function die(o) {
   navigator.vibrate && navigator.vibrate([120, 60, 160]);
   SFX.die();
   setTimeout(showOver, 800);
+}
+
+/* 护盾挡一次致死：消耗护盾并化解危险，返回 true 表示已挡住 */
+function absorbHit(o) {
+  if (shield <= 0 || deadInfo || winInfo) return false;
+  shield = 0;
+  shieldBlocks++;
+  shake = Math.max(shake, 0.3);
+  spawnBurst(player.x, player.y - 40, ['#7ec8ff', '#ffffff', '#a8e0ff'], 16, 280);
+  textPop(player.x, player.y - 150, '🛡️ TODO 挡住了!', '#7ec8ff', 24);
+  SFX.shield();
+  navigator.vibrate && navigator.vibrate(40);
+  if (o && o.type === 'pit') {
+    // 从坑底弹回地面，并跳过当前坑（推到坑外沿）
+    player.y = GROUND; player.vy = 0; player.grounded = true;
+    if (player.x < o.x + o.w) {
+      const push = o.x + o.w + 8 - player.x;
+      dist += push; camX = dist; player.x = PLAYER_X + dist;
+    }
+  } else if (o) {
+    o.dead = true;
+  }
+  return true;
+}
+
+function collectPickup(p) {
+  p.taken = true;
+  if (p.type === 'coffee') {
+    bonusPts += PICK.COFFEE_PTS;
+    madness = Math.min(100, madness + PICK.COFFEE_MAD);
+    textPop(p.x, p.y - 24, `+${PICK.COFFEE_PTS}行 · 😤+${PICK.COFFEE_MAD}`, '#ffd34d');
+  } else if (p.type === 'boba') {
+    bonusPts += PICK.BOBA_PTS;
+    const got = shield < PICK.SHIELD_MAX;
+    if (got) shield = PICK.SHIELD_MAX;
+    textPop(p.x, p.y - 24, got ? `+${PICK.BOBA_PTS}行 · 🛡️护盾` : `+${PICK.BOBA_PTS}行`, '#ff9ad5');
+  } else if (p.type === 'banana') {
+    bonusPts += PICK.BANANA_PTS;
+    bananas++;
+    if (bananas >= PICK.BANANA_NEED) {
+      bananas = 0;
+      slackT = PICK.SLACK_T;
+      slackCount++;
+      textPop(p.x, p.y - 40, '😴 摸鱼时间!!', '#ffe08a', 26);
+      SFX.slack();
+    } else {
+      textPop(p.x, p.y - 24, `+${PICK.BANANA_PTS}行 · 🍌${bananas}/${PICK.BANANA_NEED}`, '#ffe08a');
+    }
+  }
+  spawnBurst(p.x, p.y, ['#ffd34d', '#fff1b8'], 10, 200, 500);
+  SFX.pickup();
 }
 
 function winRun() {
@@ -297,7 +354,10 @@ function step(dt) {
   surge = Math.max(0, surge - SURGE_DECAY * dt);
 
   // —— 音量管线：麦克风音量（走抓峰）与合成喊声包络（自带力度）分开算 ——
-  const micVol = DEMO ? demoVol(dt) : (voice.active ? voice.update() : 0);
+  // 摸鱼时间用演示 AI 自动跳，仍可被玩家手动喊声覆盖
+  slackT = Math.max(0, slackT - dt);
+  const autoVol = DEMO ? demoVol(dt) : (slackT > 0 ? slackVol(dt) : 0);
+  const micVol = Math.max(autoVol, voice.active && !DEMO ? voice.update() : 0);
   const synthVol = shoutT > 0 ? shoutVol * clamp(shoutT / 0.2, 0, 1) : 0;
 
   // 抓峰：过阈值不立刻跳，短窗跟踪这口气的峰值，按峰值算力度。
@@ -381,9 +441,13 @@ function step(dt) {
   } else {
     player.grounded = false;
   }
-  if (player.y - PLAYER_H > H + 80) { die({ type: 'pit' }); return; }
+  if (player.y - PLAYER_H > H + 80) {
+    const pit = obstacles.find((o) => o.type === 'pit' && player.x > o.x && player.x < o.x + o.w) || { type: 'pit' };
+    if (absorbHit(pit)) { /* 护盾把吗喽捞回来 */ }
+    else { die(pit); return; }
+  }
 
-  // ===== 障碍推进 + 碰撞（发疯状态可捶爆地面障碍，纸飞机/深坑依然致命） =====
+  // ===== 障碍推进 + 碰撞（发疯捶爆优先；否则护盾挡一次；再否则死亡） =====
   fillObstacles();
   for (const o of obstacles) {
     if (o.type === 'paper') o.x -= PLANE_V * dt;
@@ -396,6 +460,8 @@ function step(dt) {
         textPop(o.x, GROUND - o.h - 40, `👊 捶爆! +${SCORE.DESTROY}`, '#ff9a3d', 22);
         shake = Math.max(shake, 0.25);
         SFX.destroy();
+      } else if (absorbHit(o)) {
+        /* 护盾挡住 */
       } else { die(o); return; }
     }
   }
@@ -411,14 +477,7 @@ function step(dt) {
 
   // ===== 道具收集 =====
   for (const p of pickups) {
-    if (!p.taken && aabb(playerBox(4), { x: p.x - 22, y: p.y - 22, w: 44, h: 44 })) {
-      p.taken = true;
-      const pts = p.type === 'boba' ? PICK.BOBA_PTS : PICK.COFFEE_PTS;
-      bonusPts += pts;
-      spawnBurst(p.x, p.y, ['#ffd34d', '#fff1b8'], 10, 200, 500);
-      textPop(p.x, p.y - 24, `+${pts}行`, '#ffd34d');
-      SFX.pickup();
-    }
+    if (!p.taken && aabb(playerBox(4), { x: p.x - 22, y: p.y - 22, w: 44, h: 44 })) collectPickup(p);
   }
   pickups = pickups.filter((p) => !p.taken && p.x > camX - 200);
 

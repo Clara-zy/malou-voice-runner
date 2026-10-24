@@ -326,6 +326,65 @@ async function main() {
   });
   check('道具收集加分', !pickup.dead && pickup.bonus >= 20, `bonus=${pickup.bonus}`);
 
+  // ---- 5b. 道具能力：咖啡回充发疯值、奶茶护盾挡死、狂暴优先不耗盾、香蕉摸鱼自动跳 ----
+  await startKeyboardRun(page);
+  await injectClearTrack(page);
+  const powers = await page.evaluate(() => {
+    window.__clearTrack();
+    // 咖啡：贴身拾取，madness 40 → 65
+    madness = 40; bonusPts = 0;
+    pickups.push({ type: 'coffee', x: player.x + 8, y: GROUND - 30, w: 44, h: 44, taken: false });
+    step(1 / 60);
+    const coffee = { bonus: bonusPts, mad: madness };
+
+    // 奶茶护盾挡一次地面障碍
+    window.__clearTrack();
+    bonusPts = 0; shield = 0; shieldBlocks = 0;
+    pickups.push({ type: 'boba', x: player.x + 8, y: GROUND - 30, w: 44, h: 44, taken: false });
+    step(1 / 60);
+    const had = shield;
+    obstacles.push({ type: 'blocker', x: player.x + 10, w: 64, h: 92, e: '📄', label: '需求变更', color: '#c98a1b' });
+    step(1 / 60);
+    const shielded = { had, shield, blocks: shieldBlocks, dead: !!deadInfo, obsGone: obstacles.every((o) => o.dead) };
+
+    // 无护盾仍死
+    window.__clearTrack();
+    deadInfo = null; shield = 0;
+    obstacles.push({ type: 'bug', x: player.x + 10, w: 56, h: 56, e: '🐛', label: 'NullPointerException', color: '#c93a3f' });
+    step(1 / 60);
+    const noShield = { dead: !!deadInfo, label: deadInfo && deadInfo.label };
+
+    // 狂暴捶爆不耗盾
+    window.__clearTrack();
+    deadInfo = null; shield = 1; shieldBlocks = 0; berserkT = 3; madness = 100; bonusPts = 0;
+    obstacles.push({ type: 'blocker', x: player.x + 10, w: 64, h: 92, e: '📄', label: '需求变更', color: '#c98a1b' });
+    step(1 / 60);
+    const berserk = { shield, blocks: shieldBlocks, destroyed: !deadInfo && bonusPts >= 30 };
+
+    // 3 香蕉摸鱼 + 自动过连环 Bug
+    window.__clearTrack();
+    deadInfo = null; bananas = 0; slackT = 0; slackCount = 0; shield = 0; berserkT = 0;
+    for (let i = 0; i < 3; i++) {
+      pickups.push({ type: 'banana', x: player.x + 8, y: GROUND - 30, w: 44, h: 44, taken: false });
+      step(1 / 60);
+    }
+    const triggered = slackT > 3.5 && slackCount === 1 && bananas === 0;
+    // 障碍放近一点，保证在 4 秒摸鱼窗内跑完（太远会摸鱼结束还在 Bug 上）
+    const x0 = player.x + 350;
+    pushBug(x0); pushBug(x0 + 460); pushBug(x0 + 920);
+    const end = x0 + 1000;
+    for (let i = 0; i < 400 && !deadInfo && player.x < end; i++) step(1 / 60);
+    const slack = { triggered, dead: !!deadInfo, passed: player.x >= end - 50, slackLeft: +slackT.toFixed(2) };
+
+    return { coffee, shielded, noShield, berserk, slack };
+  });
+  check('咖啡回充发疯值', powers.coffee.bonus >= 20 && powers.coffee.mad >= 64.5 && powers.coffee.mad <= 65,
+    JSON.stringify(powers.coffee)); // 同帧安静衰减约 10/60，故允许 64.5–65
+  check('奶茶护盾挡住地面障碍', powers.shielded.had === 1 && !powers.shielded.dead && powers.shielded.shield === 0 && powers.shielded.blocks === 1 && powers.shielded.obsGone, JSON.stringify(powers.shielded));
+  check('无护盾撞障碍仍死', powers.noShield.dead && powers.noShield.label === 'NullPointerException', JSON.stringify(powers.noShield));
+  check('狂暴捶爆不消耗护盾', powers.berserk.shield === 1 && powers.berserk.blocks === 0 && powers.berserk.destroyed, JSON.stringify(powers.berserk));
+  check('集 3 香蕉摸鱼并可自动过连环 Bug', powers.slack.triggered && !powers.slack.dead && powers.slack.passed, JSON.stringify(powers.slack));
+
   // ---- 6. 发疯值：触发狂暴 + 捶爆障碍 ----
   await startKeyboardRun(page);
   const mad = await page.evaluate(async () => {

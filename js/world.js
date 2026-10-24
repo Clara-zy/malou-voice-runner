@@ -110,16 +110,18 @@ function spawnSegment(x, prog) {
   return x;
 }
 
-/* 道具生成：放在两障碍之间的空档。咖啡低空（小跳可得），奶茶高空（满力跳） */
+/* 道具生成：放在两障碍之间的空档。
+ * 咖啡低空（小跳）、奶茶高空（满力跳）、香蕉中空（站会后出现，中等力度） */
 function spawnPickup(x) {
   if (Math.random() > PICK.CHANCE) return;
-  const boba = Math.random() < PICK.BOBA_CHANCE;
-  // 咖啡 470–500：贴着跑过头顶拿不到，必须小跳；奶茶 330–370：几乎要满力跳
-  pickups.push({
-    type: boba ? 'boba' : 'coffee',
-    x, y: boba ? 330 + Math.random() * 40 : 470 + Math.random() * 30,
-    w: 44, h: 44, taken: false,
-  });
+  const prog = x / GOAL_DIST;
+  let type = 'coffee';
+  if (Math.random() < PICK.BOBA_CHANCE) type = 'boba';
+  else if (prog >= STAGES[1].from && Math.random() < PICK.BANANA_CHANCE) type = 'banana';
+  const y = type === 'boba' ? 330 + Math.random() * 40
+    : type === 'banana' ? 420 + Math.random() * 30
+    : 470 + Math.random() * 30;
+  pickups.push({ type, x, y, w: 44, h: 44, taken: false });
 }
 
 function fillObstacles() {

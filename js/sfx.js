@@ -29,6 +29,8 @@ const SFX = {
   pickup() { this.beep(988, 0.09, 'triangle', 0.06); setTimeout(() => this.beep(1319, 0.12, 'triangle', 0.06), 70); },
   destroy() { this.beep(180, 0.3, 'sawtooth', 0.09, -120); this.beep(90, 0.25, 'square', 0.08, -40); },
   mad() { [330, 392, 494, 587, 698].forEach((f, i) => setTimeout(() => this.beep(f, 0.1, 'square', 0.06), i * 60)); },
+  shield() { this.beep(660, 0.12, 'triangle', 0.07); setTimeout(() => this.beep(880, 0.18, 'sine', 0.05), 80); },
+  slack() { [392, 349, 330, 294].forEach((f, i) => setTimeout(() => this.beep(f, 0.14, 'triangle', 0.05), i * 90)); },
 };
 
 /* ================= BGM：WebAudio 合成的 8 小节循环（低音+节奏镲+旋律） =================

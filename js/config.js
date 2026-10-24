@@ -48,8 +48,15 @@ const SCORE = {
   CAP: 9999,
 };
 
-/* 道具：咖啡低空小跳可得，奶茶高空要满力喊 */
-const PICK = { CHANCE: 0.34, BOBA_CHANCE: 0.3, COFFEE_PTS: 20, BOBA_PTS: 50 };
+/* 道具：咖啡低空小跳可得，奶茶高空要满力喊；香蕉中空，集 3 根摸鱼 */
+const PICK = {
+  CHANCE: 0.34, BOBA_CHANCE: 0.3, BANANA_CHANCE: 0.22,
+  COFFEE_PTS: 20, BOBA_PTS: 50, BANANA_PTS: 15,
+  COFFEE_MAD: 25,          // 咖啡回充发疯值
+  SHIELD_MAX: 1,           // 奶茶护盾层数上限
+  BANANA_NEED: 3,          // 摸鱼所需香蕉数
+  SLACK_T: 4,              // 摸鱼时长（秒）
+};
 
 /* 发疯值：喊=充电 安静=衰减；纸飞机靠近时冻结（闭嘴区规则） */
 const MAD = {
