@@ -585,6 +585,84 @@ async function main() {
   check('Boss 在吗喽前方出场且不回拽（含短赛程）',
     shortBoss.every((b) => b.ahead > 0 && b.back === 0), JSON.stringify(shortBoss));
 
+  // ---- 7a3b. Boss 扔的 Bug 从脚下爬向吗喽：站着不动会被撞死、发疯可撞碎；Boss 结束后前方清空 ----
+  await page.goto(BASE + '/?nolinx');
+  const crawl = await page.evaluate(() => {
+    const realRandom = Math.random;
+    const enterBoss = () => {
+      resetRun(); countdown = 0; window.__muteDemo = true;
+      obstacles.length = 0; pickups.length = 0;
+      dist = BOSS.FROM * GOAL_DIST; camX = dist; player.x = PLAYER_X + dist; speed = speedFor();
+      step(1 / 60);
+      for (let i = 0; i < 60; i++) step(1 / 60); // 跑到软门前停住
+    };
+    const throwBug = () => {
+      obstacles.length = 0;
+      Math.random = () => 0.01;
+      boss.throwCd = 0; step(1 / 60);
+      Math.random = realRandom;
+      boss.throwCd = 99;
+      return obstacles.find((o) => o.type === 'bug');
+    };
+
+    enterBoss();
+    const gap = Math.round(boss.x - (player.x + PLAYER_W / 2));
+    const bug = throwBug();
+    const x0 = bug ? bug.x : null;
+    step(0.1);
+    const moved = bug ? Math.round(x0 - bug.x) : 0;
+    const between = !!bug && bug.x > player.x && bug.x < boss.x;
+    let killed = false;
+    for (let i = 0; i < 120 && !deadInfo; i++) step(1 / 60);
+    killed = !!(deadInfo && deadInfo.label === 'NullPointerException');
+
+    enterBoss();
+    throwBug();
+    berserkT = 3; madness = 100;
+    for (let i = 0; i < 90 && boss.state === 'live' && !deadInfo; i++) step(1 / 60);
+    const smashed = !deadInfo && boss.state === 'beaten';
+    const aheadAfterBeat = obstacles.filter((o) => !o.dead && o.x + o.w > player.x - PLAYER_W / 2).length;
+
+    enterBoss();
+    obstacles.length = 0;
+    pushBug(boss.x + 200); obstacles[obstacles.length - 1].crawl = 0;
+    pushPlane(player.x + 300);
+    boss.age = BOSS.TIMEOUT; step(1 / 60);
+    const aheadAfterFlee = obstacles.filter((o) => o.x + o.w > player.x - PLAYER_W / 2).length;
+    window.__muteDemo = false;
+    return { gap, moved, between, killed, smashed, aheadAfterBeat, aheadAfterFlee };
+  });
+  check('Boss 扔的 Bug 爬向吗喽且会撞死人', crawl.gap >= 200 && crawl.moved > 0 && crawl.between && crawl.killed, JSON.stringify(crawl));
+  check('发疯一路撞碎爬虫再捶爆 Boss', crawl.smashed, JSON.stringify(crawl));
+  check('Boss 捶爆/撤兵后前方无残留障碍', crawl.aheadAfterBeat === 0 && crawl.aheadAfterFlee === 0, JSON.stringify(crawl));
+
+  // ---- 7a3c. 演示 AI 过 Boss 段零死亡（爬虫 + 纸飞机不会排成必死组合） ----
+  await page.goto(BASE + '/?demo&nolinx');
+  const demoBoss = await page.evaluate(() => {
+    const out = { runs: 0, deaths: [], beaten: 0, fled: 0 };
+    for (let k = 0; k < 20; k++) {
+      let s = ((800 + k) * 2654435761) >>> 0;
+      Math.random = () => {
+        s = (s + 0x6D2B79F5) >>> 0;
+        let t = Math.imul(s ^ (s >>> 15), s | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+      resetRun(); countdown = 0;
+      dist = (BOSS.FROM - 0.01) * GOAL_DIST; camX = dist; player.x = PLAYER_X + dist; speed = speedFor();
+      obstacles.length = 0; pickups.length = 0; spawnX = GOAL_DIST + 9999;
+      madness = (k % 3) * 40;
+      for (let i = 0; i < 60 * 20 && !deadInfo && !winInfo; i++) step(1 / 60);
+      out.runs++;
+      if (deadInfo) out.deaths.push(`${k}:${deadInfo.label}`);
+      if (bossResult === 'beaten') out.beaten++;
+      if (bossResult === 'fled') out.fled++;
+    }
+    return out;
+  });
+  check('演示 AI 过 Boss 段 20/20 零死亡，带 80 发疯值进场的 6 局全捶爆',
+    demoBoss.deaths.length === 0 && demoBoss.beaten + demoBoss.fled === 20 && demoBoss.beaten >= 6, JSON.stringify(demoBoss));
+
   // ---- 7a4. SW 静态资源按版本号精确命中：旧缓存不能冒充新 ?v= 资源；断网仍回落缓存 ----
   const swCtx = await browser.newContext();
   const swPage = await swCtx.newPage();

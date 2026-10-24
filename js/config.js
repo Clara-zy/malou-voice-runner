@@ -72,10 +72,13 @@ const GLIDE = { GRAVITY_MUL: 0.45, MIN_AIR: 20 };
 /* 终点 Boss：进入凌晨上线阶段后，产品经理拦路扔需求 */
 const BOSS = {
   FROM: 0.92,           // 与 STAGES[4] 对齐
-  AHEAD: 540,           // 出场位置 = 镜头左缘 + AHEAD；不能按终点反推，否则短赛程 Boss 落在吗喽身后
+  AHEAD: 860,           // 出场位置 = 镜头左缘 + AHEAD；不能按终点反推，否则短赛程 Boss 落在吗喽身后
+  GAP: 300,             // 软门：非发疯时吗喽停在 Boss 前这么远，给爬过来的 Bug 留反应时间
   TIMEOUT: 8,           // 秒；超时撤兵，避免卡死
-  THROW_MIN: 1.1, THROW_MAX: 1.4,
-  BUG_CHANCE: 0.28,     // 否则扔纸飞机
+  THROW_MIN: 1.5, THROW_MAX: 1.9,
+  BUG_CHANCE: 0.45,     // 否则扔纸飞机
+  BUG_V: 220,           // 扔出的 Bug 从 Boss 脚下爬向吗喽的速度
+  PLANE_V: 240,         // Boss 甩出的纸飞机更快：慢飞机会长时间压住闭嘴区，发疯值根本充不起来
   PTS: 100,
   W: 110, H: 150,
 };
