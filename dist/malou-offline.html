@@ -331,9 +331,9 @@ const STAGES = [
     sky: ['#1d3d6e', '#3a6ea5', '#79a9d1'], lit: 0.05, orb: { e: '☀️', y: 150 } },
   { from: 0.35, icon: '📝', time: '15:00', name: '需求又变了', tip: '纸飞机出没：先闭嘴，飞过去再喊', patternChance: 0.4,
     sky: ['#2a2f5e', '#7a4b78', '#d07a5a'], lit: 0.2, orb: { e: '☀️', y: 250 } },
-  { from: 0.65, icon: '🌙', time: '22:00', name: '深夜加班',   tip: '技术债连环坑：落地马上再喊',     patternChance: 0.5,
+  { from: 0.65, icon: '🌙', time: '22:00', name: '深夜加班',   tip: '宽坑要空中持续喊——滑翔过去',   patternChance: 0.5,
     sky: ['#0d1631', '#22345f', '#3a517f'], lit: 0.32, orb: { e: '🌙', y: 170 } },
-  { from: 0.92, icon: '🚀', time: '02:00', name: '凌晨上线',   tip: '冲刺！上线就在眼前',             patternChance: 0.5,
+  { from: 0.92, icon: '🚀', time: '02:00', name: '凌晨上线',   tip: '👔 产品经理拦路：发疯撞破！',     patternChance: 0,
     sky: ['#05060f', '#1a1240', '#3b2466'], lit: 0.55, orb: { e: '🌙', y: 150 } },
 ];
 const STAGE_BLEND = 0.03;    // 阶段交界前这段进度内天色渐变过渡
@@ -353,8 +353,15 @@ const SCORE = {
   CAP: 9999,
 };
 
-/* 道具：咖啡低空小跳可得，奶茶高空要满力喊 */
-const PICK = { CHANCE: 0.34, BOBA_CHANCE: 0.3, COFFEE_PTS: 20, BOBA_PTS: 50 };
+/* 道具：咖啡低空小跳可得，奶茶高空要满力喊；香蕉中空，集 3 根摸鱼 */
+const PICK = {
+  CHANCE: 0.34, BOBA_CHANCE: 0.3, BANANA_CHANCE: 0.22,
+  COFFEE_PTS: 20, BOBA_PTS: 50, BANANA_PTS: 15,
+  COFFEE_MAD: 25,          // 咖啡回充发疯值
+  SHIELD_MAX: 1,           // 奶茶护盾层数上限
+  BANANA_NEED: 3,          // 摸鱼所需香蕉数
+  SLACK_T: 4,              // 摸鱼时长（秒）
+};
 
 /* 发疯值：喊=充电 安静=衰减；纸飞机靠近时冻结（闭嘴区规则） */
 const MAD = {
@@ -362,6 +369,19 @@ const MAD = {
   FREEZE_DIST: 320,
   BERSERK_T: 5, COOLDOWN: 3,
   SPEED_MUL: 1.3, SCORE_MUL: 2,
+};
+
+/* 长音滑翔：空中音量过起跳线时减缓下落 */
+const GLIDE = { GRAVITY_MUL: 0.45, MIN_AIR: 20 };
+
+/* 终点 Boss：进入凌晨上线阶段后，产品经理拦路扔需求 */
+const BOSS = {
+  FROM: 0.92,           // 与 STAGES[4] 对齐
+  TIMEOUT: 8,           // 秒；超时撤兵，避免卡死
+  THROW_MIN: 1.1, THROW_MAX: 1.4,
+  BUG_CHANCE: 0.28,     // 否则扔纸飞机
+  PTS: 100,
+  W: 110, H: 150,
 };
 
 /* URL 参数：?demo 自动演示模式；?goal=3000 缩短赛程（默认 12000px = 1000 行代码） */
@@ -562,6 +582,8 @@ const SFX = {
   pickup() { this.beep(988, 0.09, 'triangle', 0.06); setTimeout(() => this.beep(1319, 0.12, 'triangle', 0.06), 70); },
   destroy() { this.beep(180, 0.3, 'sawtooth', 0.09, -120); this.beep(90, 0.25, 'square', 0.08, -40); },
   mad() { [330, 392, 494, 587, 698].forEach((f, i) => setTimeout(() => this.beep(f, 0.1, 'square', 0.06), i * 60)); },
+  shield() { this.beep(660, 0.12, 'triangle', 0.07); setTimeout(() => this.beep(880, 0.18, 'sine', 0.05), 80); },
+  slack() { [392, 349, 330, 294].forEach((f, i) => setTimeout(() => this.beep(f, 0.14, 'triangle', 0.05), i * 90)); },
 };
 
 /* ================= BGM：WebAudio 合成的 8 小节循环（低音+节奏镲+旋律） =================
@@ -703,6 +725,13 @@ const PATTERNS = [
       return pushPit(end + rand(300, 330), rand(110, 125));
     },
   },
+  {
+    id: 'wideGlide', name: '宽坑滑翔', stage: 3, len: 400,
+    build(x) {
+      // 360–380px：满力跳+前冲约 390px，贴沿起跳不滑翔会掉；下落段滑翔可过
+      return pushPit(x, rand(360, 380));
+    },
+  },
 ];
 
 function pickPattern(prog) {
@@ -725,16 +754,18 @@ function spawnSegment(x, prog) {
   return x;
 }
 
-/* 道具生成：放在两障碍之间的空档。咖啡低空（小跳可得），奶茶高空（满力跳） */
+/* 道具生成：放在两障碍之间的空档。
+ * 咖啡低空（小跳）、奶茶高空（满力跳）、香蕉中空（站会后出现，中等力度） */
 function spawnPickup(x) {
   if (Math.random() > PICK.CHANCE) return;
-  const boba = Math.random() < PICK.BOBA_CHANCE;
-  // 咖啡 470–500：贴着跑过头顶拿不到，必须小跳；奶茶 330–370：几乎要满力跳
-  pickups.push({
-    type: boba ? 'boba' : 'coffee',
-    x, y: boba ? 330 + Math.random() * 40 : 470 + Math.random() * 30,
-    w: 44, h: 44, taken: false,
-  });
+  const prog = x / GOAL_DIST;
+  let type = 'coffee';
+  if (Math.random() < PICK.BOBA_CHANCE) type = 'boba';
+  else if (prog >= STAGES[1].from && Math.random() < PICK.BANANA_CHANCE) type = 'banana';
+  const y = type === 'boba' ? 330 + Math.random() * 40
+    : type === 'banana' ? 420 + Math.random() * 30
+    : 470 + Math.random() * 30;
+  pickups.push({ type, x, y, w: 44, h: 44, taken: false });
 }
 
 function fillObstacles() {
@@ -776,6 +807,12 @@ let madness = 0, berserkT = 0, madCd = 0, madFrozen = false, madFlash = 0, madCo
 let stageIdx = 0, stageBanner = 0;
 /* 道具与粒子 */
 let pickups = [], particles = [], floaties = [];
+/* 护盾 / 香蕉摸鱼 */
+let shield = 0, shieldBlocks = 0;
+let bananas = 0, slackT = 0, slackCount = 0;
+let gliding = false, glideHint = false; // 空中长音滑翔；本局是否已提示过
+/* Boss：null | { x, age, throwCd, state:'live'|'beaten'|'fled' } */
+let boss = null, bossResult = null; // bossResult: 'beaten' | 'fled' | null
 
 const curScore = () => Math.min(SCORE.CAP, Math.floor(lineBase) + bonusPts);
 
@@ -919,6 +956,12 @@ function demoVol(dt) {
   demoPulse = Math.max(0, demoPulse - dt);
   if (demoPulse > 0) return 0.3;
   const n = nearestHazard();
+  // 空中过宽坑：持续喊声滑翔，直到越过坑沿
+  if (!player.grounded) {
+    for (const o of obstacles) {
+      if (o.type === 'pit' && o.w >= 200 && player.x > o.x - 40 && player.x < o.x + o.w + 20) return 0.3;
+    }
+  }
   if (n && player.grounded) {
     if (n.o.type === 'paper') return 0;                            // 纸飞机：闭嘴
     // 触发距离按当前速度等比缩放：提速后提前量也要加大
@@ -926,8 +969,15 @@ function demoVol(dt) {
     const trig = (n.o.type === 'bug' ? 80 : n.o.type === 'blocker' ? 100 : 30) * sc;
     if (n.nd <= trig) { demoPulse = 0.09; return 0.3; }            // 喊一嗓子
   }
+  // Boss 门口：没飞机就持续喊充发疯值，攒够了撞破
+  if (boss && boss.state === 'live' && player.grounded) {
+    const planeNear = obstacles.some((o) => o.type === 'paper' && Math.abs(o.x - player.x) < MAD.FREEZE_DIST);
+    if (!planeNear) return 0.3;
+  }
   return 0;                                                         // 平时安静
 }
+/* 摸鱼时间：复用演示 AI 的起跳判断（不依赖 DEMO 开关） */
+function slackVol(dt) { return demoVol(dt); }
 
 /* ================= 流程 ================= */
 function resetRun() {
@@ -944,6 +994,9 @@ function resetRun() {
   lineBase = 0; bonusPts = 0; combo = 0; maxCombo = 0;
   madness = 0; berserkT = 0; madCd = 0; madFrozen = false; madFlash = 0; madCount = 0; sprintDone = false;
   stageIdx = 0; stageBanner = 0;
+  shield = 0; shieldBlocks = 0; bananas = 0; slackT = 0; slackCount = 0;
+  gliding = false; glideHint = false;
+  boss = null; bossResult = null;
   pendingScore = 0; saved = false;
   mode = 'play';
   Music.start();
@@ -973,6 +1026,57 @@ function die(o) {
   setTimeout(showOver, 800);
 }
 
+/* 护盾挡一次致死：消耗护盾并化解危险，返回 true 表示已挡住 */
+function absorbHit(o) {
+  if (shield <= 0 || deadInfo || winInfo) return false;
+  shield = 0;
+  shieldBlocks++;
+  shake = Math.max(shake, 0.3);
+  spawnBurst(player.x, player.y - 40, ['#7ec8ff', '#ffffff', '#a8e0ff'], 16, 280);
+  textPop(player.x, player.y - 150, '🛡️ TODO 挡住了!', '#7ec8ff', 24);
+  SFX.shield();
+  navigator.vibrate && navigator.vibrate(40);
+  if (o && o.type === 'pit') {
+    // 从坑底弹回地面，并跳过当前坑（推到坑外沿）
+    player.y = GROUND; player.vy = 0; player.grounded = true;
+    if (player.x < o.x + o.w) {
+      const push = o.x + o.w + 8 - player.x;
+      dist += push; camX = dist; player.x = PLAYER_X + dist;
+    }
+  } else if (o) {
+    o.dead = true;
+  }
+  return true;
+}
+
+function collectPickup(p) {
+  p.taken = true;
+  if (p.type === 'coffee') {
+    bonusPts += PICK.COFFEE_PTS;
+    madness = Math.min(100, madness + PICK.COFFEE_MAD);
+    textPop(p.x, p.y - 24, `+${PICK.COFFEE_PTS}行 · 😤+${PICK.COFFEE_MAD}`, '#ffd34d');
+  } else if (p.type === 'boba') {
+    bonusPts += PICK.BOBA_PTS;
+    const got = shield < PICK.SHIELD_MAX;
+    if (got) shield = PICK.SHIELD_MAX;
+    textPop(p.x, p.y - 24, got ? `+${PICK.BOBA_PTS}行 · 🛡️护盾` : `+${PICK.BOBA_PTS}行`, '#ff9ad5');
+  } else if (p.type === 'banana') {
+    bonusPts += PICK.BANANA_PTS;
+    bananas++;
+    if (bananas >= PICK.BANANA_NEED) {
+      bananas = 0;
+      slackT = PICK.SLACK_T;
+      slackCount++;
+      textPop(p.x, p.y - 40, '😴 摸鱼时间!!', '#ffe08a', 26);
+      SFX.slack();
+    } else {
+      textPop(p.x, p.y - 24, `+${PICK.BANANA_PTS}行 · 🍌${bananas}/${PICK.BANANA_NEED}`, '#ffe08a');
+    }
+  }
+  spawnBurst(p.x, p.y, ['#ffd34d', '#fff1b8'], 10, 200, 500);
+  SFX.pickup();
+}
+
 function winRun() {
   if (deadInfo || winInfo) return;
   winInfo = true;
@@ -987,7 +1091,8 @@ const DEATHS = {
   '404': ['🚧', '此路不通', '404 Not Found：需求文档里的这条路，现实中不存在。', '小技巧：提前一点喊，跳得更高更远。'],
   'P0 故障': ['💣', '本迭代结束', 'P0 告警：全群都在 @你，包括老板。', '小技巧：提前一点喊，跳得更高更远。'],
   '需求变更变更': ['✈️', '低空遇袭', '纸飞机（第 N 版需求变更）从头顶飞过——谁让你在它下面乱喊的？', '小技巧：看到纸飞机就闭嘴快走，千万别跳。'],
-  'pit': ['🕳️', '掉进技术债', '这个坑是三年前的前人埋的，今天正好轮到吗喽来填。', '小技巧：坑越宽越要喊得响，起跳别太早。'],
+  '产品经理': ['👔', '需求当场拍板', '产品经理说：这个很简单，你怎么还没做完？吗喽当场社死。', '小技巧：攒满发疯值再撞上去，一拳捶爆！'],
+  'pit': ['🕳️', '掉进技术债', '这个坑是三年前的前人埋的，今天正好轮到吗喽来填。', '小技巧：坑越宽越要喊得响；空中持续喊可以滑翔。'],
 };
 function deathKey(o) {
   if (!o || o.type === 'pit') return 'pit';
@@ -1048,7 +1153,11 @@ function step(dt) {
   surge = Math.max(0, surge - SURGE_DECAY * dt);
 
   // —— 音量管线：麦克风音量（走抓峰）与合成喊声包络（自带力度）分开算 ——
-  const micVol = DEMO ? demoVol(dt) : (voice.active ? voice.update() : 0);
+  // 摸鱼时间用演示 AI 自动跳，仍可被玩家手动喊声覆盖
+  slackT = Math.max(0, slackT - dt);
+  // window.__muteDemo：测试用，强制关掉演示 AI 音量（验证「不滑翔必掉」）
+  const autoVol = (DEMO && !window.__muteDemo) ? demoVol(dt) : (slackT > 0 ? slackVol(dt) : 0);
+  const micVol = Math.max(autoVol, voice.active && !DEMO ? voice.update() : 0);
   const synthVol = shoutT > 0 ? shoutVol * clamp(shoutT / 0.2, 0, 1) : 0;
 
   // 抓峰：过阈值不立刻跳，短窗跟踪这口气的峰值，按峰值算力度。
@@ -1115,10 +1224,45 @@ function step(dt) {
     stageBanner = STAGE_BANNER_T;
     SFX.stage();
   }
+  // ===== Boss 战：进入凌晨上线阶段后生成产品经理 =====
+  if (!boss && prog >= BOSS.FROM && !winInfo) {
+    boss = { x: GOAL_DIST - 420, age: 0, throwCd: 0.8, state: 'live', iframes: 0 };
+    textPop(player.x, GROUND - 320, '👔 产品经理来了!', '#ff9a3d', 28);
+    spawnX = GOAL_DIST + 9999; // 停掉散件/套路生成
+    // 清掉镜头前所有旧障碍，避免宽坑卡在 Boss 门前（Boss 自己会扔飞机/Bug）
+    obstacles = [];
+    pickups = [];
+  }
+  if (boss && boss.state === 'live') {
+    boss.age += dt;
+    boss.iframes = Math.max(0, (boss.iframes || 0) - dt);
+    boss.throwCd -= dt;
+    if (boss.throwCd <= 0) {
+      boss.throwCd = BOSS.THROW_MIN + Math.random() * (BOSS.THROW_MAX - BOSS.THROW_MIN);
+      if (Math.random() < BOSS.BUG_CHANCE) {
+        pushBug(player.x + 420 + Math.random() * 80);
+      } else {
+        pushPlane(player.x + 280 + Math.random() * 60);
+      }
+    }
+    if (boss.age >= BOSS.TIMEOUT) {
+      boss.state = 'fled';
+      bossResult = 'fled';
+      textPop(player.x, GROUND - 300, '👔 产品经理撤了…勉强上线', '#cdd8ff', 24);
+      obstacles = obstacles.filter((o) => o.type === 'pit' ? o.x + o.w > player.x : o.x > player.x + 200);
+    }
+  }
   Music.rate = 1 + 0.15 * clamp(prog, 0, 1) + (berserkT > 0 ? 0.25 : 0) + (sprintDone ? 0.1 : 0);
 
-  // ===== 竖直物理 =====
-  player.vy += GRAVITY * dt;
+  // ===== 竖直物理（空中持续喊 → 长音滑翔，重力降低） =====
+  const airH = GROUND - player.y;
+  // 只在下落段滑翔：上升段减重力会把跳高抬到离谱，破坏「喊得越响跳得越高」的手感
+  gliding = !player.grounded && player.vy > 0 && airH >= GLIDE.MIN_AIR && vol >= voice.Tjump && countdown <= 0;
+  if (gliding && !glideHint) {
+    glideHint = true;
+    textPop(player.x, player.y - 120, '🎙️ 滑翔中', '#a8d4ff', 22);
+  }
+  player.vy += GRAVITY * (gliding ? GLIDE.GRAVITY_MUL : 1) * dt;
   player.y += player.vy * dt;
   const overPit = isOverPit();
   if (!overPit && player.y >= GROUND && player.vy >= 0) {
@@ -1132,10 +1276,33 @@ function step(dt) {
   } else {
     player.grounded = false;
   }
-  if (player.y - PLAYER_H > H + 80) { die({ type: 'pit' }); return; }
+  if (player.y - PLAYER_H > H + 80) {
+    const pit = obstacles.find((o) => o.type === 'pit' && player.x > o.x && player.x < o.x + o.w) || { type: 'pit' };
+    if (absorbHit(pit)) { /* 护盾把吗喽捞回来 */ }
+    else { die(pit); return; }
+  }
 
-  // ===== 障碍推进 + 碰撞（发疯状态可捶爆地面障碍，纸飞机/深坑依然致命） =====
-  fillObstacles();
+  // ===== Boss 碰撞：发疯撞破；护盾可挡一次接触；否则被需求砸死 =====
+  // Boss 本体：发疯撞破；否则当软门挡住（不秒杀，飞机/Bug 才是真正威胁）
+  if (boss && boss.state === 'live') {
+    const gate = boss.x - PLAYER_X - PLAYER_W / 2 - 6;
+    if (berserkT > 0 && player.x + PLAYER_W / 2 > boss.x + 8) {
+      boss.state = 'beaten';
+      bossResult = 'beaten';
+      bonusPts += BOSS.PTS;
+      spawnBurst(boss.x + BOSS.W / 2, GROUND - BOSS.H / 2, ['#ff6b6b', '#ffb020', '#ffffff'], 28, 380);
+      textPop(boss.x, GROUND - BOSS.H - 40, `👊 捶爆产品经理! +${BOSS.PTS}`, '#ff9a3d', 26);
+      shake = Math.max(shake, 0.45);
+      SFX.destroy();
+      SFX.mad();
+      obstacles = obstacles.filter((o) => o.x + (o.w || 0) < player.x - 20 || o.x > boss.x + BOSS.W);
+    } else if (dist > gate) {
+      dist = gate; camX = dist; player.x = PLAYER_X + dist;
+    }
+  }
+
+  // ===== 障碍推进 + 碰撞（发疯捶爆优先；否则护盾挡一次；再否则死亡） =====
+  if (!boss || boss.state !== 'live') fillObstacles();
   for (const o of obstacles) {
     if (o.type === 'paper') o.x -= PLANE_V * dt;
     if (o.dead || o.type === 'pit') continue;
@@ -1147,6 +1314,8 @@ function step(dt) {
         textPop(o.x, GROUND - o.h - 40, `👊 捶爆! +${SCORE.DESTROY}`, '#ff9a3d', 22);
         shake = Math.max(shake, 0.25);
         SFX.destroy();
+      } else if (absorbHit(o)) {
+        /* 护盾挡住 */
       } else { die(o); return; }
     }
   }
@@ -1162,14 +1331,7 @@ function step(dt) {
 
   // ===== 道具收集 =====
   for (const p of pickups) {
-    if (!p.taken && aabb(playerBox(4), { x: p.x - 22, y: p.y - 22, w: 44, h: 44 })) {
-      p.taken = true;
-      const pts = p.type === 'boba' ? PICK.BOBA_PTS : PICK.COFFEE_PTS;
-      bonusPts += pts;
-      spawnBurst(p.x, p.y, ['#ffd34d', '#fff1b8'], 10, 200, 500);
-      textPop(p.x, p.y - 24, `+${pts}行`, '#ffd34d');
-      SFX.pickup();
-    }
+    if (!p.taken && aabb(playerBox(4), { x: p.x - 22, y: p.y - 22, w: 44, h: 44 })) collectPickup(p);
   }
   pickups = pickups.filter((p) => !p.taken && p.x > camX - 200);
 
@@ -1201,6 +1363,7 @@ function draw() {
   drawGround();
   drawObstacles();
   drawPickups();
+  drawBoss();
   drawGoal();
   drawPlayer();
   drawParticles();
@@ -1350,7 +1513,8 @@ function drawPickups() {
     const y = p.y + Math.sin(tNow * 3 + p.x * 0.02) * 6;
     // 光晕
     const g = ctx.createRadialGradient(sx, y, 4, sx, y, 30);
-    g.addColorStop(0, p.type === 'boba' ? 'rgba(255,170,220,.35)' : 'rgba(255,211,77,.35)');
+    const glow = p.type === 'boba' ? 'rgba(255,170,220,.35)' : p.type === 'banana' ? 'rgba(255,224,138,.35)' : 'rgba(255,211,77,.35)';
+    g.addColorStop(0, glow);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -1359,7 +1523,7 @@ function drawPickups() {
     ctx.font = '34px ' + EMOJI_FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(p.type === 'boba' ? '🧋' : '☕', sx, y);
+    ctx.fillText(p.type === 'boba' ? '🧋' : p.type === 'banana' ? '🍌' : '☕', sx, y);
   }
 }
 
@@ -1426,6 +1590,39 @@ function drawMadFlash() {
   ctx.globalAlpha = 1;
 }
 
+function drawBoss() {
+  if (!boss || boss.state === 'fled') return;
+  if (boss.state === 'beaten') return;
+  const sx = boss.x - camX;
+  if (sx > W + 80 || sx + BOSS.W < -80) return;
+  const y = GROUND - BOSS.H;
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath();
+  ctx.ellipse(sx + BOSS.W / 2, GROUND + 8, BOSS.W * 0.45, 8, 0, 0, 7);
+  ctx.fill();
+  rr(sx, y, BOSS.W, BOSS.H, 14);
+  ctx.fillStyle = '#5a3d7a';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffd34d';
+  ctx.stroke();
+  ctx.font = '52px ' + EMOJI_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('👔', sx + BOSS.W / 2, y + BOSS.H / 2 - 8);
+  ctx.font = '700 15px system-ui';
+  ctx.fillStyle = '#ffe9a8';
+  ctx.fillText('产品经理', sx + BOSS.W / 2, y - 14);
+  // 超时进度条
+  const tw = BOSS.W - 16, th = 6;
+  ctx.fillStyle = 'rgba(0,0,0,.45)';
+  rr(sx + 8, y + BOSS.H - 18, tw, th, 3);
+  ctx.fill();
+  ctx.fillStyle = '#ff9a3d';
+  rr(sx + 8, y + BOSS.H - 18, tw * clamp(1 - boss.age / BOSS.TIMEOUT, 0, 1), th, 3);
+  ctx.fill();
+}
+
 function drawGoal() {
   const sx = GOAL_DIST - camX;
   if (sx < -100 || sx > W + 200) return;
@@ -1468,6 +1665,19 @@ function drawPlayer() {
       ctx.stroke();
     }
   }
+  // 滑翔音浪线
+  if (gliding && !deadInfo) {
+    ctx.strokeStyle = 'rgba(168,212,255,.55)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const ly = player.y - 70 + i * 18;
+      const wave = Math.sin(tNow * 14 + i) * 6;
+      ctx.beginPath();
+      ctx.moveTo(sx - 40, ly + wave);
+      ctx.quadraticCurveTo(sx - 70, ly - wave, sx - 100 - i * 8, ly + wave * 0.5);
+      ctx.stroke();
+    }
+  }
 
   if (berserkT > 0 && !deadInfo) {
     // 发疯光环
@@ -1479,7 +1689,14 @@ function drawPlayer() {
   }
 
   const shouting = lastVol > voice.Tjump;
-  const face = deadInfo ? '💀' : winInfo ? '🥳' : berserkT > 0 ? '🤬' : shouting ? '😡' : '🐵';
+  const face = deadInfo ? '💀' : winInfo ? '🥳' : slackT > 0 ? '😴' : berserkT > 0 ? '🤬' : shouting ? '😡' : '🐵';
+  if (shield > 0 && !deadInfo) {
+    ctx.strokeStyle = 'rgba(126,200,255,.7)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(sx, player.y - 38, 48 + Math.sin(tNow * 6) * 2, 0, 7);
+    ctx.stroke();
+  }
   ctx.font = '62px ' + EMOJI_FONT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
@@ -1542,7 +1759,11 @@ function drawVolMeter(x, y, w, h) {
 
 function drawHUD() {
   hudPill(24, 20, `📋 ${curScore()} 行代码`, 22, '#ffd34d');
-  if (combo >= 2) hudPill(24, 74, `🔥 连躲 x${combo}`, 18, '#ff9a3d');
+  let pillY = 74;
+  if (combo >= 2) { hudPill(24, pillY, `🔥 连躲 x${combo}`, 18, '#ff9a3d'); pillY += 54; }
+  if (shield > 0) { hudPill(24, pillY, `🛡️ 护盾 ×${shield}`, 18, '#7ec8ff'); pillY += 54; }
+  if (bananas > 0 && slackT <= 0) { hudPill(24, pillY, `🍌 ${bananas}/${PICK.BANANA_NEED}`, 18, '#ffe08a'); pillY += 54; }
+  if (slackT > 0) hudPill(24, pillY, `😴 摸鱼 ${slackT.toFixed(1)}s`, 18, '#ffe08a');
 
   const px = 330, pw = 440, py = 32, ph = 16;
   ctx.fillStyle = 'rgba(10,16,34,.75)';
@@ -1681,11 +1902,19 @@ function showOver() {
   const stats = [];
   if (maxCombo >= 2) stats.push(`最高连躲 x${maxCombo}`);
   if (madCount > 0) stats.push(`发疯 ${madCount} 次`);
+  if (shieldBlocks > 0) stats.push(`护盾挡 ${shieldBlocks} 次`);
+  if (slackCount > 0) stats.push(`摸鱼 ${slackCount} 次`);
+  if (bossResult === 'beaten') stats.push('捶爆产品经理');
+  else if (bossResult === 'fled') stats.push('Boss 撤兵');
   const statsStr = stats.length ? `（${stats.join(' · ')}）` : '';
   if (winInfo) {
     $('over-emoji').textContent = '🎉';
     $('over-title').textContent = '上线成功！';
-    $('over-msg').textContent = `本次发布 ${pendingScore} 行代码 · 0 回滚 · 建议全组喝奶茶庆祝`;
+    $('over-msg').textContent = bossResult === 'beaten'
+      ? `捶爆产品经理，成功发布 ${pendingScore} 行代码 · 建议全组喝奶茶庆祝`
+      : bossResult === 'fled'
+        ? `产品经理撤了，勉强上线 ${pendingScore} 行代码 · 今晚又是一夜鱼肚白`
+        : `本次发布 ${pendingScore} 行代码 · 0 回滚 · 建议全组喝奶茶庆祝`;
     $('over-tip').textContent = '';
   } else {
     const [em, ti, ms, tp] = DEATHS[deathKey(deadInfo)] || DEATHS.pit;

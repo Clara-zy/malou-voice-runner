@@ -29,6 +29,8 @@ let pickups = [], particles = [], floaties = [];
 let shield = 0, shieldBlocks = 0;
 let bananas = 0, slackT = 0, slackCount = 0;
 let gliding = false, glideHint = false; // 空中长音滑翔；本局是否已提示过
+/* Boss：null | { x, age, throwCd, state:'live'|'beaten'|'fled' } */
+let boss = null, bossResult = null; // bossResult: 'beaten' | 'fled' | null
 
 const curScore = () => Math.min(SCORE.CAP, Math.floor(lineBase) + bonusPts);
 
@@ -185,6 +187,11 @@ function demoVol(dt) {
     const trig = (n.o.type === 'bug' ? 80 : n.o.type === 'blocker' ? 100 : 30) * sc;
     if (n.nd <= trig) { demoPulse = 0.09; return 0.3; }            // 喊一嗓子
   }
+  // Boss 门口：没飞机就持续喊充发疯值，攒够了撞破
+  if (boss && boss.state === 'live' && player.grounded) {
+    const planeNear = obstacles.some((o) => o.type === 'paper' && Math.abs(o.x - player.x) < MAD.FREEZE_DIST);
+    if (!planeNear) return 0.3;
+  }
   return 0;                                                         // 平时安静
 }
 /* 摸鱼时间：复用演示 AI 的起跳判断（不依赖 DEMO 开关） */
@@ -207,6 +214,7 @@ function resetRun() {
   stageIdx = 0; stageBanner = 0;
   shield = 0; shieldBlocks = 0; bananas = 0; slackT = 0; slackCount = 0;
   gliding = false; glideHint = false;
+  boss = null; bossResult = null;
   pendingScore = 0; saved = false;
   mode = 'play';
   Music.start();
@@ -301,7 +309,8 @@ const DEATHS = {
   '404': ['🚧', '此路不通', '404 Not Found：需求文档里的这条路，现实中不存在。', '小技巧：提前一点喊，跳得更高更远。'],
   'P0 故障': ['💣', '本迭代结束', 'P0 告警：全群都在 @你，包括老板。', '小技巧：提前一点喊，跳得更高更远。'],
   '需求变更变更': ['✈️', '低空遇袭', '纸飞机（第 N 版需求变更）从头顶飞过——谁让你在它下面乱喊的？', '小技巧：看到纸飞机就闭嘴快走，千万别跳。'],
-  'pit': ['🕳️', '掉进技术债', '这个坑是三年前的前人埋的，今天正好轮到吗喽来填。', '小技巧：坑越宽越要喊得响，起跳别太早。'],
+  '产品经理': ['👔', '需求当场拍板', '产品经理说：这个很简单，你怎么还没做完？吗喽当场社死。', '小技巧：攒满发疯值再撞上去，一拳捶爆！'],
+  'pit': ['🕳️', '掉进技术债', '这个坑是三年前的前人埋的，今天正好轮到吗喽来填。', '小技巧：坑越宽越要喊得响；空中持续喊可以滑翔。'],
 };
 function deathKey(o) {
   if (!o || o.type === 'pit') return 'pit';
@@ -433,6 +442,34 @@ function step(dt) {
     stageBanner = STAGE_BANNER_T;
     SFX.stage();
   }
+  // ===== Boss 战：进入凌晨上线阶段后生成产品经理 =====
+  if (!boss && prog >= BOSS.FROM && !winInfo) {
+    boss = { x: GOAL_DIST - 420, age: 0, throwCd: 0.8, state: 'live', iframes: 0 };
+    textPop(player.x, GROUND - 320, '👔 产品经理来了!', '#ff9a3d', 28);
+    spawnX = GOAL_DIST + 9999; // 停掉散件/套路生成
+    // 清掉镜头前所有旧障碍，避免宽坑卡在 Boss 门前（Boss 自己会扔飞机/Bug）
+    obstacles = [];
+    pickups = [];
+  }
+  if (boss && boss.state === 'live') {
+    boss.age += dt;
+    boss.iframes = Math.max(0, (boss.iframes || 0) - dt);
+    boss.throwCd -= dt;
+    if (boss.throwCd <= 0) {
+      boss.throwCd = BOSS.THROW_MIN + Math.random() * (BOSS.THROW_MAX - BOSS.THROW_MIN);
+      if (Math.random() < BOSS.BUG_CHANCE) {
+        pushBug(player.x + 420 + Math.random() * 80);
+      } else {
+        pushPlane(player.x + 280 + Math.random() * 60);
+      }
+    }
+    if (boss.age >= BOSS.TIMEOUT) {
+      boss.state = 'fled';
+      bossResult = 'fled';
+      textPop(player.x, GROUND - 300, '👔 产品经理撤了…勉强上线', '#cdd8ff', 24);
+      obstacles = obstacles.filter((o) => o.type === 'pit' ? o.x + o.w > player.x : o.x > player.x + 200);
+    }
+  }
   Music.rate = 1 + 0.15 * clamp(prog, 0, 1) + (berserkT > 0 ? 0.25 : 0) + (sprintDone ? 0.1 : 0);
 
   // ===== 竖直物理（空中持续喊 → 长音滑翔，重力降低） =====
@@ -463,8 +500,27 @@ function step(dt) {
     else { die(pit); return; }
   }
 
+  // ===== Boss 碰撞：发疯撞破；护盾可挡一次接触；否则被需求砸死 =====
+  // Boss 本体：发疯撞破；否则当软门挡住（不秒杀，飞机/Bug 才是真正威胁）
+  if (boss && boss.state === 'live') {
+    const gate = boss.x - PLAYER_X - PLAYER_W / 2 - 6;
+    if (berserkT > 0 && player.x + PLAYER_W / 2 > boss.x + 8) {
+      boss.state = 'beaten';
+      bossResult = 'beaten';
+      bonusPts += BOSS.PTS;
+      spawnBurst(boss.x + BOSS.W / 2, GROUND - BOSS.H / 2, ['#ff6b6b', '#ffb020', '#ffffff'], 28, 380);
+      textPop(boss.x, GROUND - BOSS.H - 40, `👊 捶爆产品经理! +${BOSS.PTS}`, '#ff9a3d', 26);
+      shake = Math.max(shake, 0.45);
+      SFX.destroy();
+      SFX.mad();
+      obstacles = obstacles.filter((o) => o.x + (o.w || 0) < player.x - 20 || o.x > boss.x + BOSS.W);
+    } else if (dist > gate) {
+      dist = gate; camX = dist; player.x = PLAYER_X + dist;
+    }
+  }
+
   // ===== 障碍推进 + 碰撞（发疯捶爆优先；否则护盾挡一次；再否则死亡） =====
-  fillObstacles();
+  if (!boss || boss.state !== 'live') fillObstacles();
   for (const o of obstacles) {
     if (o.type === 'paper') o.x -= PLANE_V * dt;
     if (o.dead || o.type === 'pit') continue;

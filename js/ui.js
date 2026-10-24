@@ -46,11 +46,17 @@ function showOver() {
   if (madCount > 0) stats.push(`发疯 ${madCount} 次`);
   if (shieldBlocks > 0) stats.push(`护盾挡 ${shieldBlocks} 次`);
   if (slackCount > 0) stats.push(`摸鱼 ${slackCount} 次`);
+  if (bossResult === 'beaten') stats.push('捶爆产品经理');
+  else if (bossResult === 'fled') stats.push('Boss 撤兵');
   const statsStr = stats.length ? `（${stats.join(' · ')}）` : '';
   if (winInfo) {
     $('over-emoji').textContent = '🎉';
     $('over-title').textContent = '上线成功！';
-    $('over-msg').textContent = `本次发布 ${pendingScore} 行代码 · 0 回滚 · 建议全组喝奶茶庆祝`;
+    $('over-msg').textContent = bossResult === 'beaten'
+      ? `捶爆产品经理，成功发布 ${pendingScore} 行代码 · 建议全组喝奶茶庆祝`
+      : bossResult === 'fled'
+        ? `产品经理撤了，勉强上线 ${pendingScore} 行代码 · 今晚又是一夜鱼肚白`
+        : `本次发布 ${pendingScore} 行代码 · 0 回滚 · 建议全组喝奶茶庆祝`;
     $('over-tip').textContent = '';
   } else {
     const [em, ti, ms, tp] = DEATHS[deathKey(deadInfo)] || DEATHS.pit;

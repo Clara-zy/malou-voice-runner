@@ -28,7 +28,7 @@ const STAGES = [
     sky: ['#2a2f5e', '#7a4b78', '#d07a5a'], lit: 0.2, orb: { e: '☀️', y: 250 } },
   { from: 0.65, icon: '🌙', time: '22:00', name: '深夜加班',   tip: '宽坑要空中持续喊——滑翔过去',   patternChance: 0.5,
     sky: ['#0d1631', '#22345f', '#3a517f'], lit: 0.32, orb: { e: '🌙', y: 170 } },
-  { from: 0.92, icon: '🚀', time: '02:00', name: '凌晨上线',   tip: '冲刺！上线就在眼前',             patternChance: 0.5,
+  { from: 0.92, icon: '🚀', time: '02:00', name: '凌晨上线',   tip: '👔 产品经理拦路：发疯撞破！',     patternChance: 0,
     sky: ['#05060f', '#1a1240', '#3b2466'], lit: 0.55, orb: { e: '🌙', y: 150 } },
 ];
 const STAGE_BLEND = 0.03;    // 阶段交界前这段进度内天色渐变过渡
@@ -68,6 +68,16 @@ const MAD = {
 
 /* 长音滑翔：空中音量过起跳线时减缓下落 */
 const GLIDE = { GRAVITY_MUL: 0.45, MIN_AIR: 20 };
+
+/* 终点 Boss：进入凌晨上线阶段后，产品经理拦路扔需求 */
+const BOSS = {
+  FROM: 0.92,           // 与 STAGES[4] 对齐
+  TIMEOUT: 8,           // 秒；超时撤兵，避免卡死
+  THROW_MIN: 1.1, THROW_MAX: 1.4,
+  BUG_CHANCE: 0.28,     // 否则扔纸飞机
+  PTS: 100,
+  W: 110, H: 150,
+};
 
 /* URL 参数：?demo 自动演示模式；?goal=3000 缩短赛程（默认 12000px = 1000 行代码） */
 const qs = new URLSearchParams(location.search);

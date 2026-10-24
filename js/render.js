@@ -20,6 +20,7 @@ function draw() {
   drawGround();
   drawObstacles();
   drawPickups();
+  drawBoss();
   drawGoal();
   drawPlayer();
   drawParticles();
@@ -244,6 +245,39 @@ function drawMadFlash() {
   ctx.globalAlpha = a;
   bigCenter('😤 发疯写码!!', '#ff6b6b');
   ctx.globalAlpha = 1;
+}
+
+function drawBoss() {
+  if (!boss || boss.state === 'fled') return;
+  if (boss.state === 'beaten') return;
+  const sx = boss.x - camX;
+  if (sx > W + 80 || sx + BOSS.W < -80) return;
+  const y = GROUND - BOSS.H;
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath();
+  ctx.ellipse(sx + BOSS.W / 2, GROUND + 8, BOSS.W * 0.45, 8, 0, 0, 7);
+  ctx.fill();
+  rr(sx, y, BOSS.W, BOSS.H, 14);
+  ctx.fillStyle = '#5a3d7a';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffd34d';
+  ctx.stroke();
+  ctx.font = '52px ' + EMOJI_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('👔', sx + BOSS.W / 2, y + BOSS.H / 2 - 8);
+  ctx.font = '700 15px system-ui';
+  ctx.fillStyle = '#ffe9a8';
+  ctx.fillText('产品经理', sx + BOSS.W / 2, y - 14);
+  // 超时进度条
+  const tw = BOSS.W - 16, th = 6;
+  ctx.fillStyle = 'rgba(0,0,0,.45)';
+  rr(sx + 8, y + BOSS.H - 18, tw, th, 3);
+  ctx.fill();
+  ctx.fillStyle = '#ff9a3d';
+  rr(sx + 8, y + BOSS.H - 18, tw * clamp(1 - boss.age / BOSS.TIMEOUT, 0, 1), th, 3);
+  ctx.fill();
 }
 
 function drawGoal() {

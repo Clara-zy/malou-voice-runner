@@ -1,6 +1,10 @@
 # Issue #004：终点 Boss 战（产品经理）
 
-- 状态：待做（#003 完成后开始）
+- 状态：✅ 已完成（冒烟测试 38/38）
+
+### 实现备注
+- Boss 本体是**软门**（挡住不秒杀），真正威胁是它扔的纸飞机/Bug；发疯撞破 +100，超时 8 秒撤兵也可冲线。
+- 登场时清空镜头前旧障碍，避免宽坑卡在门前。
 - 分支：`feature/new-play-mechanics`
 - 依赖：#002、#003
 - 涉及文件：`js/config.js`、`js/world.js`、`js/game.js`、`js/render.js`、`js/sfx.js`、`js/ui.js`、`tests/smoke.spec.mjs`、`README.md`
