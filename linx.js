@@ -250,7 +250,17 @@ class LinxClient {
 
     const open = this.ready && this.idle && !this.speaking && this.ws && this.ws.readyState === WebSocket.OPEN;
     if (!open) {
-      if (this.listening) this.endUtterance();
+      // 对局已经开始时不要再发 listen stop，否则灵矽会接一句新回复，和游戏叠在一起
+      if (this.listening) {
+        if (this.suppressTts || !this.idle) {
+          this.listening = false;
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.send({ session_id: this.sessionId, type: 'abort', reason: 'game_started' });
+          }
+        } else {
+          this.endUtterance();
+        }
+      }
       this.preroll.length = 0;
       this.loud = 0;
       return;
@@ -371,18 +381,18 @@ class LinxClient {
     if (this.speak(text, true)) this.voiceNote('正在朗读…');
   }
 
-  // 离开结算页时立刻停掉正在念的结果，并丢掉还在路上的语音
+  // 离开结算或重开时立刻停掉正在念的结果，并丢掉还在路上的语音
   stopSpeaking() {
     clearTimeout(this.quietTimer);
     clearTimeout(this.speakTimer);
-    const pending = this.speaking || this.awaitingResultTts;
     this.awaitingResultTts = false;
     this.speaking = false;
     this.suppressTts = true;
+    this.abortSent = true;
     this.opusQueue = [];
-    if (pending && this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.send({ session_id: this.sessionId, type: 'abort', reason: 'back_to_menu' });
-      this.abortSent = true;
+    this.listening = false;
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.send({ session_id: this.sessionId, type: 'abort', reason: 'game_started' });
     }
     this.stopPlayback();
     this.voiceNote('');
@@ -393,9 +403,12 @@ class LinxClient {
   // 只有主页 / 结算界面才收音和说话（收音由 onFrame 判断）；开麦校准、对局期间打断 TTS，
   // 否则 AI 的声音会被校准当成环境噪音、对局中也会被当成喊声触发起跳
   tick() {
-    if (!this.idle && this.speaking && !this.abortSent) {
+    if (!this.idle && (this.speaking || this.awaitingResultTts) && !this.abortSent) {
       this.send({ session_id: this.sessionId, type: 'abort', reason: 'game_started' });
       this.abortSent = true;
+      this.speaking = false;
+      this.awaitingResultTts = false;
+      this.suppressTts = true;
       this.stopPlayback();
     }
     const sub = document.getElementById('linx-sub');
@@ -412,10 +425,12 @@ class LinxClient {
         if (msg.text) this.emoji = msg.text;
         break;
       case 'tts':
-        if (this.suppressTts) {
+        if (this.suppressTts || !this.idle) {
           if (msg.state === 'start' && this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.send({ session_id: this.sessionId, type: 'abort', reason: 'back_to_menu' });
+            this.send({ session_id: this.sessionId, type: 'abort', reason: 'game_started' });
           }
+          this.speaking = false;
+          this.stopPlayback();
           break;
         }
         if (msg.state === 'start') {
@@ -506,7 +521,7 @@ class LinxClient {
   }
 
   enqueue(samples, rate) {
-    if (!samples.length || !this.ac) return;
+    if (!samples.length || !this.ac || this.suppressTts || !this.idle) return;
     if (this.ac.state === 'suspended') this.ac.resume();
     const buf = this.ac.createBuffer(1, samples.length, rate);
     buf.copyToChannel(samples, 0);
