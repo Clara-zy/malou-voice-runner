@@ -118,9 +118,8 @@ function doSave() {
 }
 $('btn-save').addEventListener('click', doSave);
 $('name-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' || e.key === 'Esc') return; // 留给页面：回主页
+  if (e.key === 'Escape' || e.key === 'Esc' || e.key === 'Enter') return; // Esc 回主页，Enter 立刻重开
   e.stopPropagation();
-  if (e.key === 'Enter') doSave();
 });
 $('btn-retry').addEventListener('click', () => { if (mode === 'over') resetRun(); });
 

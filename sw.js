@@ -2,7 +2,7 @@
 
 /* Service Worker：预缓存全部静态资源，断网也能完整游玩（摆摊/现场兜底）
  * 注意：改动任何静态资源时把 CACHE 版本号 +1，否则老设备拿不到新版本。 */
-const CACHE = 'malou-v10';
+const CACHE = 'malou-v11';
 const ASSETS = [
   './',
   'index.html',

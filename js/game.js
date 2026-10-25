@@ -103,6 +103,13 @@ addEventListener('keydown', (e) => {
     else if (mode === 'menu') closeSettings();
     return;
   }
+  // 结算页按 Enter 立刻重开，不等口播念完，也不被花名输入框拦住
+  if (mode === 'over' && k === 'Enter') {
+    e.preventDefault();
+    $('name-input').blur();
+    resetRun();
+    return;
+  }
   if (document.activeElement === $('name-input')) return; // 输花名时不响应任何游戏快捷键（含 F/M）
   if (k === 'f' || k === 'F') {
     if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
@@ -202,6 +209,7 @@ function slackVol(dt) { return demoVol(dt); }
 
 /* ================= 流程 ================= */
 function resetRun() {
+  if (window.linx) window.linx.stopSpeaking(); // 重开时停掉结算口播，避免声音叠进下一局
   dist = 0; camX = 0; speed = 0; lastVol = 0;
   obstacles = []; spawnX = 1000; pickups = [];
   particles = []; floaties = [];
